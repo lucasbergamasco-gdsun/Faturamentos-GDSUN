@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal de Análise de Faturamento</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f4;
+      --bg-tertiary: #eeede8;
+      --text: #1a1a18;
+      --text-secondary: #6b6b67;
+      --border: rgba(0,0,0,0.12);
+      --border-md: rgba(0,0,0,0.22);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --blue: #185FA5;
+      --blue-bg: #E6F1FB;
+      --green: #3B6D11;
+      --green-bg: #EAF3DE;
+      --amber: #854F0B;
+      --amber-bg: #FAEEDA;
+      --red: #A32D2D;
+      --red-bg: #FCEBEB;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a18;
+        --bg-secondary: #242422;
+        --bg-tertiary: #2e2e2b;
+        --text: #f0ede6;
+        --text-secondary: #9a9a94;
+        --border: rgba(255,255,255,0.10);
+        --border-md: rgba(255,255,255,0.20);
+        --blue: #85B7EB;
+        --blue-bg: #042C53;
+        --green: #97C459;
+        --green-bg: #173404;
+        --amber: #FAC775;
+        --amber-bg: #412402;
+        --red: #F09595;
+        --red-bg: #501313;
+      }
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-tertiary);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--bg);
+      border-bottom: 0.5px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      font-size: 15px;
+    }
+
+    .header-brand i { font-size: 20px; color: var(--blue); }
+
+    .version-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 0.5px solid var(--border);
+    }
+
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    .client-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .client-btn {
+      font-size: 13px;
+      padding: 6px 16px;
+      border-radius: 99px;
+      border: 0.5px solid var(--border-md);
+      background: var(--bg);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: var(--font);
+      transition: all 0.15s;
+    }
+
+    .client-btn:hover { background: var(--bg-secondary); }
+    .client-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+    .client-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .upload-zone {
+      border: 1.5px dashed var(--border-md);
+      border-radius: var(--radius-lg);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      background: var(--bg);
+      transition: background 0.15s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      background: var(--bg-secondary);
+      border-color: var(--blue);
+    }
+
+    .upload-zone i { font-size: 40px; color: var(--text-secondary); }
+    .upload-zone .main-text { font-weight: 500; color: var(--text); margin-top: 0.75rem; }
+    .upload-zone .sub-text { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 3rem;
+      background: var(--bg);
+      border-radius: var(--radius-lg);
+    }
+
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2px solid var(--border-md);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #results { display: none; }
+
+    .results-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .results-header h2 { font-size: 20px; font-weight: 500; }
+    .results-header p { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+    .btn {
+      font-size: 13px;
+      padding: 7px 14px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-md);
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: var(--bg-secondary); }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 1.5rem;
+    }
+
+    .metric {
+      background: var(--bg);
+      border-radius: var(--radius-md);
+      padding: 0.875rem 1rem;
+      border: 0.5px solid var(--border);
+    }
+
+    .metric-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .metric-val { font-size: 22px; font-weight: 500; }
+
+    .filter-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .filter-btn {
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 0.5px solid var(--border-md);
+      background: var(--bg);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: var(--font);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+
+    .filter-btn:hover { background: var(--bg-secondary); }
+    .filter-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+    .issue-card {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 8px;
+    }
+
+    .issue-card.danger { border-left: 3px solid #E24B4A; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+    .issue-card.warn   { border-left: 3px solid #EF9F27; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+    .issue-card.info   { border-left: 3px solid #378ADD; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+    .issue-card.ok     { border-left: 3px solid #639922; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .uc-code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 9px;
+      border-radius: 99px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .badge-danger  { background: var(--red-bg);    color: var(--red);   }
+    .badge-warn    { background: var(--amber-bg);  color: var(--amber); }
+    .badge-info    { background: var(--blue-bg);   color: var(--blue);  }
+    .badge-ok      { background: var(--green-bg);  color: var(--green); }
+    .badge-neutral { background: var(--bg-secondary); color: var(--text-secondary); border: 0.5px solid var(--border); }
+
+    .issue-item {
+      font-size: 13px;
+      color: var(--text);
+      padding: 3px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .issue-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 7px;
+    }
+
+    .dot-danger { background: #E24B4A; }
+    .dot-warn   { background: #EF9F27; }
+    .dot-info   { background: #378ADD; }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin: 1.75rem 0 0.75rem;
+    }
+
+    .table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 0.5px solid var(--border); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--bg); }
+
+    thead th {
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 0.5px solid var(--border-md);
+      white-space: nowrap;
+      background: var(--bg-secondary);
+    }
+
+    tbody td {
+      padding: 9px 12px;
+      border-bottom: 0.5px solid var(--border);
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-secondary); }
+
+    .icon-ok   { color: #639922; font-size: 16px; }
+    .icon-fail { color: #E24B4A; font-size: 16px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .error-box {
+      background: var(--red-bg);
+      color: var(--red);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-top: 0.5px solid var(--border);
+      margin-top: 3rem;
+      background: var(--bg);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <i class="ti ti-bolt"></i>
+    Portal de Análise de Faturamento
+  </div>
+  <span class="version-badge">v1.0 · Jun/2026</span>
+</header>
+
+<main>
+  <div style="margin-bottom: 1.5rem;">
+    <h1 style="font-size: 22px; font-weight: 500; margin-bottom: 4px;">Análise de medição</h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">Selecione o modelo do cliente e envie o arquivo de faturamento para análise automática.</p>
+  </div>
+
+  <p class="section-title" style="margin-top: 0;">Modelo do cliente</p>
+  <div class="client-selector">
+    <button class="client-btn active" onclick="selectClient('magalu', this)">Magazine Luiza</button>
+    <button class="client-btn" disabled>Outro cliente (em breve)</button>
+  </div>
+
+  <div class="upload-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+    <i class="ti ti-file-spreadsheet"></i>
+    <p class="main-text">Arraste o arquivo Excel aqui</p>
+    <p class="sub-text">ou clique para selecionar · .xlsx · .xls</p>
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p style="font-size: 14px; color: var(--text-secondary);" id="loadingMsg">Lendo arquivo...</p>
+  </div>
+
+  <div id="errorBox" style="display:none; margin-top: 1rem;"></div>
+
+  <div id="results">
+    <div class="results-header">
+      <div>
+        <h2 id="resultsTitle">Resultado da análise</h2>
+        <p id="resultsSubtitle"></p>
+      </div>
+      <button class="btn" onclick="resetUpload()">
+        <i class="ti ti-refresh"></i> Nova análise
+      </button>
+    </div>
+
+    <div class="metric-grid" id="metricGrid"></div>
+
+    <p class="section-title">Ocorrências por UC</p>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="applyFilter('all', this)">Todos</button>
+      <button class="filter-btn" onclick="applyFilter('danger', this)"><i class="ti ti-alert-circle" style="font-size:12px"></i> Críticos</button>
+      <button class="filter-btn" onclick="applyFilter('warn', this)"><i class="ti ti-alert-triangle" style="font-size:12px"></i> Atenção</button>
+      <button class="filter-btn" onclick="applyFilter('info', this)"><i class="ti ti-info-circle" style="font-size:12px"></i> Indicadores</button>
+      <button class="filter-btn" onclick="applyFilter('ok', this)"><i class="ti ti-circle-check" style="font-size:12px"></i> Conformes</button>
+    </div>
+
+    <div id="issuesList"></div>
+
+    <p class="section-title">Detalhamento por UC</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>UC</th>
+            <th>Rateio %</th>
+            <th>Consumo (kWh)</th>
+            <th>Compensação (kWh)</th>
+            <th>Saldo (kWh)</th>
+            <th>PIS</th>
+            <th>COFINS</th>
+            <th>ICMS</th>
+            <th>Ocorrências</th>
+          </tr>
+        </thead>
+        <tbody id="ucTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Portal de Análise de Faturamento · v1.0 · Junho 2026
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  let allIssues = [];
+  let currentClient = 'magalu';
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  function selectClient(client, btn) {
+    document.querySelectorAll('.client-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentClient = client;
+  }
+
+  function setLoading(msg) {
+    dropzone.style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    document.getElementById('loadingMsg').textContent = msg;
+  }
+
+  function showError(msg) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('dropzone').style.display = 'block';
+    const box = document.getElementById('errorBox');
+    box.innerHTML = `<div class="error-box"><i class="ti ti-alert-circle"></i> ${msg}</div>`;
+    box.style.display = 'block';
+  }
+
+  function resetUpload() {
+    dropzone.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    fileInput.value = '';
+  }
+
+  function handleFile(file) {
+    if (!file) return;
+    setLoading('Lendo arquivo...');
+    const reader = new FileReader();
+    reader.onload = e => {
+      setLoading('Aplicando regras de análise...');
+      setTimeout(() => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array' });
+          const sheetName = wb.SheetNames.find(n => n.includes('O&M') || n.includes('lculo')) || wb.SheetNames[1];
+          const sheet = wb.Sheets[sheetName];
+          if (!sheet) { showError('Aba de cálculo não encontrada. Verifique se é um modelo válido.'); return; }
+          const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+          if (currentClient === 'magalu') analyzeMagalu(raw, file.name);
+        } catch (err) {
+          showError('Erro ao processar o arquivo. Verifique se é um modelo Magalu válido.');
+        }
+      }, 350);
+    };
+    reader.onerror = () => showError('Não foi possível ler o arquivo.');
+    reader.readAsArrayBuffer(file);
+  }
+
+  function analyzeMagalu(rows, fileName) {
+    const headerRow = rows.find(r =>
+      r.some(c => String(c).includes('UC')) &&
+      r.some(c => String(c).includes('Compensada') || String(c).includes('Compensado'))
+    );
+    if (!headerRow) { showError('Estrutura de colunas não reconhecida. Use o modelo Magalu.'); return; }
+
+    const findCol = (...terms) => headerRow.findIndex(h => terms.some(t => String(h).toLowerCase().includes(t.toLowerCase())));
+
+    const cols = {
+      uc:           findCol('UC'),
+      pct:          findCol('%'),
+      consumo:      findCol('Energia Consumida Mês'),
+      compFatura:   findCol('Consumo Compensado Fatura'),
+      saldo:        findCol('Crédito Geração Mês'),
+      pis:          findCol('PIS'),
+      cofins:       findCol('COFINS'),
+      icms:         findCol('ICMS TE e TUSD'),
+    };
+
+    const dataStart = rows.indexOf(headerRow) + 2;
+    const ucs = [];
+
+    for (let i = dataStart; i < rows.length; i++) {
+      const r = rows[i];
+      const ucVal = r[cols.uc];
+      if (!ucVal || String(ucVal).trim() === '' || isNaN(Number(ucVal))) continue;
+      if (String(ucVal).toLowerCase() === 'total') break;
+
+      const consumo    = parseFloat(r[cols.consumo]) || 0;
+      const compensada = parseFloat(r[cols.compFatura]) || 0;
+      const saldo      = parseFloat(r[cols.saldo]) || 0;
+      const pct        = parseFloat(r[cols.pct]) || 0;
+      const pis        = parseFloat(r[cols.pis]) || 0;
+      const cofins     = parseFloat(r[cols.cofins]) || 0;
+      const icms       = parseFloat(r[cols.icms]) || 0;
+
+      const issues = [];
+      const CONSUMO_MINIMO = 100;
+      const expectedComp = Math.max(0, consumo - CONSUMO_MINIMO);
+
+      // Regra 1 — Compensação vs consumo mínimo com saldo disponível
+      if (consumo > 0 && saldo > 0 && expectedComp > 0 && compensada < expectedComp * 0.95) {
+        issues.push({
+          type: 'danger', rule: 1,
+          msg: `Compensação registrada (${Math.round(compensada).toLocaleString('pt-BR')} kWh) abaixo do esperado (${Math.round(expectedComp).toLocaleString('pt-BR')} kWh). UC possui saldo de ${Math.round(saldo).toLocaleString('pt-BR')} kWh e não compensou ao máximo.`
+        });
+      }
+
+      // Regra 3 — Impostos zerados
+      if (consumo > 0) {
+        if (pis === 0)    issues.push({ type: 'danger', rule: 3, msg: 'PIS zerado na fatura.' });
+        if (cofins === 0) issues.push({ type: 'danger', rule: 3, msg: 'COFINS zerado na fatura.' });
+        if (icms === 0)   issues.push({ type: 'danger', rule: 3, msg: 'ICMS zerado na fatura.' });
+      }
+
+      // Regra 4 — Rateio alto x compensação baixa
+      if (pct > 0.02 && consumo > 0 && expectedComp > 0) {
+        const compRatio = compensada / expectedComp;
+        if (compRatio < 0.6) {
+          if (saldo > 0) {
+            issues.push({ type: 'warn', rule: 4, msg: `Rateio alto (${(pct*100).toFixed(2)}%) com compensação baixa (${Math.round(compRatio*100)}% do esperado) e saldo disponível. Verificar lista de rateio.` });
+          } else {
+            issues.push({ type: 'info', rule: 4, msg: `Rateio alto (${(pct*100).toFixed(2)}%) com compensação baixa (${Math.round(compRatio*100)}% do esperado). Possível indicador de revisão da lista.` });
+          }
+        }
+      }
+
+      // Regra 5 — Recebeu créditos, compensou pouco, sem saldo
+      if (consumo > 0 && compensada > 0 && saldo === 0 && expectedComp > 0) {
+        const compRatio = compensada / expectedComp;
+        if (compRatio < 0.6) {
+          issues.push({ type: 'info', rule: 5, msg: `UC recebeu créditos mas compensou abaixo do esperado (${Math.round(compRatio*100)}%) sem saldo remanescente. Indicador de troca de lista de rateio.` });
+        }
+      }
+
+      // UC sem consumo no período
+      if (consumo === 0 && pct > 0) {
+        issues.push({ type: 'warn', rule: 0, msg: 'UC sem dados de consumo no período. Pode estar inativa ou sem fatura processada.' });
+      }
+
+      ucs.push({ uc: String(ucVal), pct, consumo, compensada, saldo, pis, cofins, icms, issues });
+    }
+
+    if (ucs.length === 0) { showError('Nenhuma UC encontrada no arquivo. Verifique o modelo.'); return; }
+    renderResults(ucs, fileName);
+  }
+
+  function topType(u) {
+    if (u.issues.some(i => i.type === 'danger')) return 'danger';
+    if (u.issues.some(i => i.type === 'warn'))   return 'warn';
+    if (u.issues.some(i => i.type === 'info'))   return 'info';
+    return 'ok';
+  }
+
+  function renderResults(ucs, fileName) {
+    const total    = ucs.length;
+    const critical = ucs.filter(u => u.issues.some(i => i.type === 'danger')).length;
+    const warns    = ucs.filter(u => u.issues.some(i => i.type === 'warn') && !u.issues.some(i => i.type === 'danger')).length;
+    const infos    = ucs.filter(u => u.issues.some(i => i.type === 'info') && !u.issues.some(i => i.type === 'danger') && !u.issues.some(i => i.type === 'warn')).length;
+    const ok       = ucs.filter(u => u.issues.length === 0).length;
+
+    document.getElementById('resultsTitle').textContent = 'Resultado da análise';
+    document.getElementById('resultsSubtitle').textContent = `${fileName} · ${total} UCs analisadas`;
+
+    document.getElementById('metricGrid').innerHTML = `
+      <div class="metric"><div class="metric-label">Total de UCs</div><div class="metric-val">${total}</div></div>
+      <div class="metric"><div class="metric-label" style="color:var(--red)">Críticos</div><div class="metric-val" style="color:var(--red)">${critical}</div></div>
+      <div class="metric"><div class="metric-label" style="color:var(--amber)">Atenção</div><div class="metric-val" style="color:var(--amber)">${warns}</div></div>
+      <div class="metric"><div class="metric-label" style="color:var(--blue)">Indicadores</div><div class="metric-val" style="color:var(--blue)">${infos}</div></div>
+      <div class="metric"><div class="metric-label" style="color:var(--green)">Conformes</div><div class="metric-val" style="color:var(--green)">${ok}</div></div>
+    `;
+
+    allIssues = ucs.filter(u => u.issues.length > 0);
+    renderIssuesList(allIssues);
+    renderTable(ucs);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+  }
+
+  function renderIssuesList(items) {
+    const el = document.getElementById('issuesList');
+    if (items.length === 0) {
+      el.innerHTML = '<div class="empty-state"><i class="ti ti-circle-check" style="font-size:28px; color:var(--green); display:block; margin-bottom:8px"></i>Nenhuma ocorrência para o filtro selecionado.</div>';
+      return;
+    }
+    const labelMap = { danger: 'Crítico', warn: 'Atenção', info: 'Indicador', ok: 'Conforme' };
+    const iconMap  = { danger: 'ti-alert-circle', warn: 'ti-alert-triangle', info: 'ti-info-circle', ok: 'ti-circle-check' };
+
+    el.innerHTML = items.map(u => {
+      const t = topType(u);
+      const ruleNums = [...new Set(u.issues.map(i => i.rule).filter(r => r > 0))];
+      return `<div class="issue-card ${t}">
+        <div class="card-header">
+          <span class="uc-code">${u.uc}</span>
+          <span class="badge badge-${t}"><i class="ti ${iconMap[t]}" style="font-size:11px"></i> ${labelMap[t]}</span>
+          ${ruleNums.map(r => `<span class="badge badge-neutral">Regra ${r}</span>`).join('')}
+          <span style="font-size:12px; color:var(--text-secondary); margin-left:auto;">Rateio: ${(u.pct*100).toFixed(2)}%</span>
+        </div>
+        ${u.issues.map(i => `
+          <div class="issue-item">
+            <span class="issue-dot dot-${i.type}"></span>
+            <span>${i.msg}</span>
+          </div>`).join('')}
+      </div>`;
+    }).join('');
+  }
+
+  function renderTable(ucs) {
+    const check = `<i class="ti ti-circle-check icon-ok"></i>`;
+    const fail  = `<i class="ti ti-circle-x icon-fail"></i>`;
+    document.getElementById('ucTableBody').innerHTML = ucs.map(u => {
+      const t = topType(u);
+      const rowBg = t === 'danger' ? 'var(--red-bg)' : t === 'warn' ? 'var(--amber-bg)' : t === 'info' ? 'var(--blue-bg)' : '';
+      const pisOk    = u.consumo === 0 || u.pis > 0;
+      const cofinsOk = u.consumo === 0 || u.cofins > 0;
+      const icmsOk   = u.consumo === 0 || u.icms > 0;
+      const occColor = t === 'danger' ? 'var(--red)' : t === 'warn' ? 'var(--amber)' : t === 'info' ? 'var(--blue)' : 'var(--green)';
+      return `<tr style="background:${rowBg}">
+        <td><span style="font-family:var(--font-mono); font-size:11px;">${u.uc}</span></td>
+        <td>${(u.pct*100).toFixed(2)}%</td>
+        <td>${u.consumo > 0 ? Math.round(u.consumo).toLocaleString('pt-BR') : '—'}</td>
+        <td>${u.compensada > 0 ? Math.round(u.compensada).toLocaleString('pt-BR') : '—'}</td>
+        <td>${u.saldo > 0 ? `<span style="color:var(--red); font-weight:500">${Math.round(u.saldo).toLocaleString('pt-BR')}</span>` : '—'}</td>
+        <td>${pisOk ? check : fail}</td>
+        <td>${cofinsOk ? check : fail}</td>
+        <td>${icmsOk ? check : fail}</td>
+        <td><span style="color:${occColor}; font-size:12px;">${u.issues.length === 0 ? 'Nenhuma' : u.issues.length + ' ocorrência' + (u.issues.length > 1 ? 's' : '')}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function applyFilter(type, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (type === 'all') { renderIssuesList(allIssues); return; }
+    const filtered = allIssues.filter(u => {
+      if (type === 'danger') return u.issues.some(i => i.type === 'danger');
+      if (type === 'warn')   return u.issues.some(i => i.type === 'warn') && !u.issues.some(i => i.type === 'danger');
+      if (type === 'info')   return u.issues.some(i => i.type === 'info') && !u.issues.some(i => i.type === 'danger') && !u.issues.some(i => i.type === 'warn');
+      if (type === 'ok')     return u.issues.length === 0;
+      return true;
+    });
+    renderIssuesList(filtered);
+  }
+</script>
+</body>
+</html>
