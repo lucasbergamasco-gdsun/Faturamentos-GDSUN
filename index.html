@@ -204,7 +204,7 @@ function clienteLabel(){ return currentClient==='magalu'?'Magalu':'Raia Drogasil
 
 // Extrai mês de referência do nome do arquivo (ex: 04_26 ou 04_2026 → 2026-04)
 function mesFromFileName(fileName){
-  const m=fileName.match(/[_-](\d{2})[_](\d{2,4})[-_]/);
+  const m=fileName.match(/[_-](\d{2})[_](\d{2,4})(?:[-_.]|$)/);
   if(!m) return null;
   const mm=m[1], yy=m[2].length===2?'20'+m[2]:m[2];
   return `${yy}-${mm}`;
@@ -367,6 +367,11 @@ function analyzeRaia(wb,fileName){
           const dv=firstDataRow[dateCol];
           if(dv instanceof Date) detectedMes=`${dv.getFullYear()}-${String(dv.getMonth()+1).padStart(2,'0')}`;
           else if(typeof dv==='string'&&/20\d{2}-\d{2}/.test(dv)) detectedMes=dv.slice(0,7);
+          // Formato americano "M/D/YY" ou "M/D/YYYY" retornado pelo XLSX.js raw:false
+          else if(typeof dv==='string'){
+            const dm=dv.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+            if(dm){const yy=dm[3].length===2?'20'+dm[3]:dm[3];detectedMes=`${yy}-${dm[1].padStart(2,'0')}`;}
+          }
         }
         if(!detectedMes){
           for(const cell of firstDataRow){
@@ -483,7 +488,10 @@ function applyRules(ucs,ufv,mes,ugSummary){
     const compTotal=ucs.filter(u=>u.hasData).reduce((s,u)=>s+u.compensada,0);
     const saldoAtKwh=saldoAt!=null?saldoAt*1000:null;
     const saldoM1Kwh=saldoM1!=null?saldoM1*1000:null;
-    const varSaldo=(saldoAtKwh!=null&&saldoM1Kwh!=null)?saldoAtKwh-saldoM1Kwh:0;
+    // Saldo atual das UCs da medição (crédito para o mês seguinte) — usado quando banco não tem o mês atual
+    const saldoUCsKwh=ucs.filter(u=>u.hasData).reduce((s,u)=>s+u.saldo,0);
+    const saldoAtEfetivo=saldoAtKwh!=null?saldoAtKwh:saldoUCsKwh;
+    const varSaldo=saldoM1Kwh!=null?saldoAtEfetivo-saldoM1Kwh:0;
     const pctVazia=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct,0);
     const potVazio=pctVazia*ijM1_kwh;
     const totalExp=compTotal+varSaldo+potVazio;
@@ -492,7 +500,8 @@ function applyRules(ucs,ufv,mes,ugSummary){
     const dp=`${sinal==='acima'?'+':'−'}${(desvio*100).toFixed(1)}%`;
     const nUGs=ugSummary?ugSummary.length:1;
     const ugNota=nUGs>1?` (consolidado de ${nUGs} UGs)`:'';
-    const det=`GL M-1${ugNota}: ${Math.round(ijM1_kwh).toLocaleString('pt-BR')} kWh · Compensação total: ${Math.round(compTotal).toLocaleString('pt-BR')} kWh · Variação saldo: ${Math.round(varSaldo).toLocaleString('pt-BR')} kWh · Potencial linhas vazias (${(pctVazia*100).toFixed(1)}%): ${Math.round(potVazio).toLocaleString('pt-BR')} kWh · Total explicado: ${Math.round(totalExp).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
+    const saldoFonte=saldoAtKwh!=null?'banco':'medição';
+    const det=`GL M-1${ugNota}: ${Math.round(ijM1_kwh).toLocaleString('pt-BR')} kWh · Compensação total: ${Math.round(compTotal).toLocaleString('pt-BR')} kWh · Variação saldo (via ${saldoFonte}): ${Math.round(varSaldo).toLocaleString('pt-BR')} kWh · Potencial linhas vazias (${(pctVazia*100).toFixed(1)}%): ${Math.round(potVazio).toLocaleString('pt-BR')} kWh · Total explicado: ${Math.round(totalExp).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
     const tipo=desvio<=0.05?'ok':desvio<=0.10?'warn':'danger';
     const dirMsg=sinal==='acima'
       ?`Compensação+saldo supera o GL M-1 em ${dp} — pode indicar reconhecimento de energia acima do registrado ou uso de saldo acumulado de meses anteriores. Recomenda-se analisar o histórico de IJ para verificar se houve reconhecimentos abaixo do esperado em períodos anteriores.`
