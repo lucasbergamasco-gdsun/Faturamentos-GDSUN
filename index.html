@@ -519,53 +519,58 @@ function applyRules(ucs,ufv,mes,ugSummary){
   }
 
   // ── Global: Regra 6 — Revisão de lista de rateio ────────────────
-  // Lógica: UCs com saldo mês a mês recebem mais injeção do que consomem (rateio alto demais).
-  // UCs sub-compensadas sem saldo recebem menos injeção do que precisam (rateio baixo demais).
-  // O saldo acumulado é intransferível entre UCs — o indicador mede o desajuste do rateio
-  // comparando a injeção recebida (compensada) com o potencial de consumo de cada UC.
+  // Lógica:
+  // - UCs com saldo (saldoProx > 0): estão recebendo mais injeção do que consomem → rateio alto
+  // - UCs sub-compensadas sem saldo: estão recebendo menos do que precisam → rateio baixo
+  // - Variação de saldo positiva no consolidado reforça o indicador (créditos acumulando)
+  // O saldo acumulado é intransferível — o indicador mede o desajuste do rateio de injeção.
   const comDados=ucs.filter(u=>u.hasData&&u.consumo>0);
   if(comDados.length>0){
-    // UCs que geraram saldo: compensada > consumo líquido → rateio provavelmente alto demais
+    // UCs acumulando saldo próximo mês → estão sobrando créditos (rateio alto demais)
     const comSaldo=comDados.filter(u=>u.saldo>0);
-    // UCs sub-compensadas sem saldo: compensada < potencial e sem crédito acumulado
-    // → rateio provavelmente baixo demais para o consumo da UC
+    // UCs sub-compensadas sem saldo → ficaram com déficit (rateio baixo demais)
     const subComp=comDados.filter(u=>{
       const exp=Math.max(0,u.consumo-u.taxMin);
       return exp>0&&u.compensada<exp*0.95&&u.saldo===0;
     });
-    // Excesso de compensação nas UCs com saldo (energia recebida além do consumo no mês)
-    const excessoComp=comSaldo.reduce((s,u)=>{
-      const exp=Math.max(0,u.consumo-u.taxMin);
-      return s+Math.max(0,u.compensada-exp);
-    },0);
-    // Déficit de compensação nas UCs sub-compensadas (energia que poderia ter sido alocada)
+    // Crédito acumulado = total de saldo gerado nas UCs com saldo (injeção além do consumo)
+    const creditoAcum=comSaldo.reduce((s,u)=>s+u.saldo,0);
+    // Déficit = quanto as UCs sub-compensadas ficaram abaixo do potencial
     const deficit=subComp.reduce((s,u)=>{
       const exp=Math.max(0,u.consumo-u.taxMin);
       return s+(exp-u.compensada);
     },0);
-    // Melhoria potencial = quanto do excesso poderia cobrir o déficit se o rateio fosse ajustado
-    const melhoriaKwh=Math.min(excessoComp,deficit);
+    // Variação de saldo consolidada (saldo total gerado este mês)
+    const saldoTotalMes=comDados.reduce((s,u)=>s+u.saldo,0);
+    // Melhoria potencial = quanto do crédito acumulado poderia cobrir o déficit
+    const melhoriaKwh=Math.min(creditoAcum,deficit);
     const compTotal=comDados.reduce((s,u)=>s+u.compensada,0);
     const melhoriaPorc=compTotal>0?melhoriaKwh/compTotal:0;
+    // Reforço: variação positiva de saldo indica acúmulo contínuo → mais motivo para revisão
+    const saldoCresce=saldoTotalMes>0;
     let r6tipo='ok',r6msg='',r6det='';
     if(comSaldo.length>0&&subComp.length>0){
-      r6det=`${comSaldo.length} UC(s) com rateio acima do consumo (excesso: ${Math.round(excessoComp).toLocaleString('pt-BR')} kWh) · ${subComp.length} UC(s) com rateio abaixo do consumo (déficit: ${Math.round(deficit).toLocaleString('pt-BR')} kWh) · Potencial de melhoria com revisão do rateio: ${(melhoriaPorc*100).toFixed(1)}%`;
-      if(melhoriaPorc>=0.05){
+      const reforcoSaldo=saldoCresce?` Saldo total acumulado no mês: ${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh — créditos crescendo, reforça a necessidade de revisão.`:'';
+      r6det=`${comSaldo.length} UC(s) acumulando saldo (${Math.round(creditoAcum).toLocaleString('pt-BR')} kWh) · ${subComp.length} UC(s) sub-compensadas (déficit: ${Math.round(deficit).toLocaleString('pt-BR')} kWh) · Potencial de melhoria com revisão do rateio: ${(melhoriaPorc*100).toFixed(1)}%`;
+      if(melhoriaPorc>=0.05||saldoCresce){
         r6tipo='warn';
-        r6msg=`${comSaldo.length} UC(s) recebendo mais injeção do que consomem e ${subComp.length} UC(s) recebendo menos. Revisão do rateio poderia melhorar o aproveitamento em ~${(melhoriaPorc*100).toFixed(1)}% da compensação total.`;
+        r6msg=`${comSaldo.length} UC(s) acumulando saldo enquanto ${subComp.length} UC(s) ficam sub-compensadas. Revisão do rateio de injeção poderia melhorar o aproveitamento em ~${(melhoriaPorc*100).toFixed(1)}% da compensação total.${reforcoSaldo}`;
         comSaldo.forEach(u=>{
-          const exp=Math.max(0,u.consumo-u.taxMin);
-          const exc=Math.max(0,u.compensada-exp);
-          if(exc>0) u.issues.push({type:'info',rule:6,msg:`UC recebe mais injeção do que consome no mês (excesso de ${Math.round(exc).toLocaleString('pt-BR')} kWh → acumula saldo). Rateio pode estar alto demais — indicador de revisão de lista.`});
+          u.issues.push({type:'info',rule:6,msg:`UC acumula saldo de ${Math.round(u.saldo).toLocaleString('pt-BR')} kWh — está recebendo mais injeção do que consome. Rateio provavelmente alto demais. Indicador de revisão de lista.`});
         });
         subComp.forEach(u=>{
           const exp=Math.max(0,u.consumo-u.taxMin);
-          u.issues.push({type:'info',rule:6,msg:`UC compensou ${Math.round(u.compensada/exp*100)}% do potencial sem saldo remanescente. Rateio pode estar baixo demais — indicador de revisão de lista.`});
+          const def=exp-u.compensada;
+          u.issues.push({type:'info',rule:6,msg:`UC compensou apenas ${Math.round(u.compensada/exp*100)}% do potencial (déficit de ${Math.round(def).toLocaleString('pt-BR')} kWh) sem saldo remanescente. Rateio provavelmente baixo demais. Indicador de revisão de lista.`});
         });
       } else {
         r6tipo='info';
-        r6msg=`Há UCs com excesso e outras com déficit de compensação, mas o potencial de melhoria (${(melhoriaPorc*100).toFixed(1)}%) está abaixo de 5%. Rateio adequado.`;
+        r6msg=`Há UCs com saldo e outras sub-compensadas, mas o potencial de melhoria (${(melhoriaPorc*100).toFixed(1)}%) está abaixo de 5% e saldo não está crescendo. Rateio adequado.`;
       }
+    } else if(saldoCresce&&subComp.length===0&&comSaldo.length>0){
+      r6tipo='info';
+      r6msg=`${comSaldo.length} UC(s) acumulando saldo (${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh) sem UCs sub-compensadas. Créditos crescendo — acompanhar nos próximos meses.`;
+      r6det=`Saldo acumulado: ${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh · Nenhuma UC sub-compensada identificada.`;
     } else {
       r6msg='Aproveitamento equilibrado entre as UCs. Nenhuma revisão de lista necessária.';
     }
