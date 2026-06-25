@@ -321,7 +321,7 @@ function analyzeMagalu(wb,fileName){
       if(String(ucVal).toLowerCase()==='total')break;
       const consumo=pf(r[cols.consumo]);
       allUCs.push({uc:String(ucVal).trim(),ug:'—',pct:pf(r[cols.pct]),consumo,
-        compensada:pf(r[cols.compFat]),saldo:pf(r[cols.saldo]),
+        compensada:pf(r[cols.compFat]),saldo:pf(r[cols.saldo]),saldoAnt:cols.saldoAnt>=0?pf(r[cols.saldoAnt]):0,
         pis:pf(r[cols.pis]),cofins:pf(r[cols.cofins]),icms:pf(r[cols.icms]),
         hasData:consumo>0,taxMin:100,issues:[]});
     }
@@ -413,6 +413,7 @@ function analyzeRaia(wb,fileName){
       consumo:colIdx(hRow,['Consumo De Energia']),
       comp:  colIdx(hRow,['Energia Compensada']),
       saldo: colIdx(hRow,['Crédito para o Mês Seguinte']),
+      saldoAnt: colIdx(hRow,['Créditos Provenientes','Créditos do Mês Anterior']),
       pis:   colIdx(hRow,['Alíq. PIS']),
       cofins:colIdx(hRow,['Alíq. COFINS']),
       icms:  colIdx(hRow,['Alíq. ICMS']),
@@ -437,7 +438,7 @@ function analyzeRaia(wb,fileName){
         uc:String(ucVal).trim(),ug:sName,
         pct:pf(r[cols.pct]),consumo,
         compensada:pf(r[cols.comp]),
-        saldo:pf(r[cols.saldo]),
+        saldo:pf(r[cols.saldo]),saldoAnt:cols.saldoAnt>=0?pf(r[cols.saldoAnt]):0,
         pis:pf(r[cols.pis]),cofins:pf(r[cols.cofins]),icms:pf(r[cols.icms]),
         hasData:consumo>0,taxMin:taxMinFinal,issues:[],
       });
@@ -540,21 +541,27 @@ function applyRules(ucs,ufv,mes,ugSummary){
       const exp=Math.max(0,u.consumo-u.taxMin);
       return s+(exp-u.compensada);
     },0);
-    // Variação de saldo consolidada (saldo total gerado este mês)
+    // Variação real de saldo: saldo próximo mês vs saldo anterior (créditos provenientes)
     const saldoTotalMes=comDados.reduce((s,u)=>s+u.saldo,0);
+    const saldoTotalAnt=comDados.reduce((s,u)=>s+(u.saldoAnt||0),0);
+    const varSaldoR6=saldoTotalMes-saldoTotalAnt; // negativo = consumindo créditos; positivo = acumulando
     // Melhoria potencial = quanto do crédito acumulado poderia cobrir o déficit
     const melhoriaKwh=Math.min(creditoAcum,deficit);
     const compTotal=comDados.reduce((s,u)=>s+u.compensada,0);
     const melhoriaPorc=compTotal>0?melhoriaKwh/compTotal:0;
-    // Reforço: variação positiva de saldo indica acúmulo contínuo → mais motivo para revisão
-    const saldoCresce=saldoTotalMes>0;
+    // Saldo crescendo = acúmulo contínuo → reforça revisão; diminuindo = lista consumindo créditos
+    const saldoCresce=varSaldoR6>0;
+    const temSaldoAnt=saldoTotalAnt>0;
     let r6tipo='ok',r6msg='',r6det='';
     if(comSaldo.length>0&&subComp.length>0){
-      const reforcoSaldo=saldoCresce?` Saldo total acumulado no mês: ${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh — créditos crescendo, reforça a necessidade de revisão.`:'';
-      r6det=`${comSaldo.length} UC(s) acumulando saldo (${Math.round(creditoAcum).toLocaleString('pt-BR')} kWh) · ${subComp.length} UC(s) sub-compensadas (déficit: ${Math.round(deficit).toLocaleString('pt-BR')} kWh) · Potencial de melhoria com revisão do rateio: ${(melhoriaPorc*100).toFixed(1)}%`;
+      const varSaldoStr=temSaldoAnt?(varSaldoR6>0
+        ?` Créditos crescendo (variação: +${Math.round(varSaldoR6).toLocaleString('pt-BR')} kWh) — reforça a necessidade de revisão do rateio.`
+        :` Créditos diminuindo (variação: ${Math.round(varSaldoR6).toLocaleString('pt-BR')} kWh) — lista está consumindo saldo acumulado. Revisão do rateio pode acelerar o aproveitamento.`)
+        :'';
+      r6det=`${comSaldo.length} UC(s) acumulando saldo (${Math.round(creditoAcum).toLocaleString('pt-BR')} kWh) · ${subComp.length} UC(s) sub-compensadas (déficit: ${Math.round(deficit).toLocaleString('pt-BR')} kWh) · Variação de saldo: ${temSaldoAnt?Math.round(varSaldoR6).toLocaleString('pt-BR')+' kWh':'sem dado anterior'} · Potencial de melhoria com revisão do rateio: ${(melhoriaPorc*100).toFixed(1)}%`;
       if(melhoriaPorc>=0.05||saldoCresce){
         r6tipo='warn';
-        r6msg=`${comSaldo.length} UC(s) acumulando saldo enquanto ${subComp.length} UC(s) ficam sub-compensadas. Revisão do rateio de injeção poderia melhorar o aproveitamento em ~${(melhoriaPorc*100).toFixed(1)}% da compensação total.${reforcoSaldo}`;
+        r6msg=`${comSaldo.length} UC(s) acumulando saldo enquanto ${subComp.length} UC(s) ficam sub-compensadas. Revisão do rateio de injeção poderia melhorar o aproveitamento em ~${(melhoriaPorc*100).toFixed(1)}% da compensação total.${varSaldoStr}`;
         comSaldo.forEach(u=>{
           u.issues.push({type:'info',rule:6,msg:`UC acumula saldo de ${Math.round(u.saldo).toLocaleString('pt-BR')} kWh — está recebendo mais injeção do que consome. Rateio provavelmente alto demais. Indicador de revisão de lista.`});
         });
@@ -567,10 +574,12 @@ function applyRules(ucs,ufv,mes,ugSummary){
         r6tipo='info';
         r6msg=`Há UCs com saldo e outras sub-compensadas, mas o potencial de melhoria (${(melhoriaPorc*100).toFixed(1)}%) está abaixo de 5% e saldo não está crescendo. Rateio adequado.`;
       }
-    } else if(saldoCresce&&subComp.length===0&&comSaldo.length>0){
+    } else if(comSaldo.length>0&&subComp.length===0){
       r6tipo='info';
-      r6msg=`${comSaldo.length} UC(s) acumulando saldo (${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh) sem UCs sub-compensadas. Créditos crescendo — acompanhar nos próximos meses.`;
-      r6det=`Saldo acumulado: ${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh · Nenhuma UC sub-compensada identificada.`;
+      const tendencia=temSaldoAnt?(saldoCresce?' Créditos crescendo — acompanhar nos próximos meses.'
+        :` Créditos diminuindo (variação: ${Math.round(varSaldoR6).toLocaleString('pt-BR')} kWh) — lista consumindo saldo normalmente.`):'';
+      r6msg=`${comSaldo.length} UC(s) acumulando saldo sem UCs sub-compensadas.${tendencia}`;
+      r6det=`Saldo acumulado: ${Math.round(saldoTotalMes).toLocaleString('pt-BR')} kWh · Variação: ${temSaldoAnt?Math.round(varSaldoR6).toLocaleString('pt-BR')+' kWh':'sem dado anterior'} · Nenhuma UC sub-compensada identificada.`;
     } else {
       r6msg='Aproveitamento equilibrado entre as UCs. Nenhuma revisão de lista necessária.';
     }
