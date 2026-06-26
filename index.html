@@ -236,8 +236,16 @@ function handleFile(file){
     setTimeout(()=>{
       try{
         const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-        if(currentClient==='magalu') analyzeMagalu(wb,file.name);
-        else if(currentClient==='raia') analyzeRaia(wb,file.name);
+        // Detectar modelo automaticamente pelas abas do arquivo
+        const hasCalcOM=wb.SheetNames.some(n=>n.toLowerCase().includes('o&m')||n.toLowerCase().includes('lculo'));
+        const hasUFV=wb.SheetNames.some(n=>/^UFV\d+$/.test(n)||n==='Medição'||n==='Medicao');
+        const clienteDetectado=hasCalcOM?'magalu':hasUFV?'raia':currentClient;
+        if(clienteDetectado!==currentClient){
+          console.warn('Modelo detectado automaticamente: '+clienteDetectado+' (selecionado: '+currentClient+')');
+        }
+        if(clienteDetectado==='magalu') analyzeMagalu(wb,file.name);
+        else if(clienteDetectado==='raia') analyzeRaia(wb,file.name);
+        else showError('Modelo não identificado. Verifique se o arquivo é um modelo Magalu ou Raia Drogasil.');
       }catch(err){showError('Erro ao processar o arquivo. Verifique se é um modelo válido.')}
     },350);
   };
@@ -327,10 +335,45 @@ function analyzeMagalu(wb,fileName){
     }
   }
   if(!allUCs.length){showError('Nenhuma UC encontrada.');return}
-  renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary);
+  // Extrair labels IPCA (linha com "IPCA Base" e "IPCA Atual")
+  let ipcaLabels=[];
+  for(const sName of calcSheets){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sName],{header:1,defval:'',raw:false});
+    const iRow=rows.find(r=>r.some(c=>String(c).toUpperCase().includes('IPCA')));
+    if(iRow){ipcaLabels=iRow.filter(c=>String(c).toUpperCase().includes('IPCA'));break;}
+  }
+  renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary,ipcaLabels);
 }
 
 // ── PARSER RAIA ──────────────────────────────────────────────────────
+function mesFromIPCALabel(txt){
+  if(!txt) return null;
+  const meses={jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+  const t=String(txt).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const m=t.match(/([a-z]{3,})\/?\s*(\d{2,4})/);
+  if(!m) return null;
+  const mm=meses[m[1].slice(0,3)];
+  if(!mm) return null;
+  const yy=m[2].length===2?'20'+m[2]:m[2];
+  return `${yy}-${String(mm).padStart(2,'0')}`;
+}
+function ipcaReajusteInfo(labels, detectedMes){
+  // Extrai mês/ano de cada label IPCA e encontra o mais recente (atual) e o mais antigo (base)
+  const meses=labels.map(mesFromIPCALabel).filter(Boolean).sort();
+  if(meses.length<2||!detectedMes) return null;
+  const ipcaBase=meses[0], ipcaAtual=meses[meses.length-1];
+  // Mês de próximo reajuste = ipcaAtual + 12 meses
+  const [ay,am]=ipcaAtual.split('-').map(Number);
+  const reajusteAno=am===12?ay+1:ay, reajusteMes=am===12?1:am+1;
+  // Formatar como YYYY-MM mas 12 meses à frente
+  const totalM=ay*12+am+12;
+  const rAno=Math.floor((totalM-1)/12), rMes=((totalM-1)%12)+1;
+  const proxReajuste=`${rAno}-${String(rMes).padStart(2,'0')}`;
+  // Verificar se detectedMes >= proxReajuste
+  const isReajuste=detectedMes>=proxReajuste;
+  return {ipcaBase, ipcaAtual, proxReajuste, isReajuste};
+}
+
 function mesFromFaturaLabel(txt){
   if(!txt) return null;
   const meses={jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
@@ -446,11 +489,18 @@ function analyzeRaia(wb,fileName){
   }
 
   if(!allUCs.length){showError('Nenhuma UC encontrada. Verifique o modelo Raia.');return}
-  renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary);
+  // Extrair labels IPCA
+  let ipcaLabels=[];
+  for(const sName of dataSheets){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sName],{header:1,defval:'',raw:false});
+    const iRow=rows.find(r=>r.some(c=>String(c).toUpperCase().includes('IPCA')));
+    if(iRow){ipcaLabels=iRow.filter(c=>String(c).toUpperCase().includes('IPCA'));break;}
+  }
+  renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary,ipcaLabels);
 }
 
 // ── REGRAS ───────────────────────────────────────────────────────────
-function applyRules(ucs,ufv,mes,ugSummary){
+function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[]){
   const mesM1=mes?prevMonth(mes):null;
   const ijM1  =(ufv&&mesM1)?IJ_DB[`${ufv}|${mesM1}`]:null;
   const saldoM1=(ufv&&mesM1)?SALDO_DB[`${ufv}|${mesM1}`]:null;
@@ -487,11 +537,13 @@ function applyRules(ucs,ufv,mes,ugSummary){
   if(ijM1!==null){
     const ijM1_kwh=ijM1*1000; // banco em MWh → converter para kWh
     const compTotal=ucs.filter(u=>u.hasData).reduce((s,u)=>s+u.compensada,0);
-    const saldoAtKwh=saldoAt!=null?saldoAt*1000:null;
+    // Saldo M-1: sempre do banco (referência confiável)
     const saldoM1Kwh=saldoM1!=null?saldoM1*1000:null;
-    // Saldo atual das UCs da medição (crédito para o mês seguinte) — usado quando banco não tem o mês atual
-    const saldoUCsKwh=ucs.filter(u=>u.hasData).reduce((s,u)=>s+u.saldo,0);
+    // Saldo atual: banco se disponível, senão soma das UCs da medição
+    const saldoAtKwh=saldoAt!=null?saldoAt*1000:null;
+    const saldoUCsKwh=ucs.filter(u=>u.hasData||u.saldo>0).reduce((s,u)=>s+u.saldo,0);
     const saldoAtEfetivo=saldoAtKwh!=null?saldoAtKwh:saldoUCsKwh;
+    const saldoFonteAt=saldoAtKwh!=null?'banco':'medição';
     const varSaldo=saldoM1Kwh!=null?saldoAtEfetivo-saldoM1Kwh:0;
     const pctVazia=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct,0);
     const potVazio=pctVazia*ijM1_kwh;
@@ -501,8 +553,8 @@ function applyRules(ucs,ufv,mes,ugSummary){
     const dp=`${sinal==='acima'?'+':'−'}${(desvio*100).toFixed(1)}%`;
     const nUGs=ugSummary?ugSummary.length:1;
     const ugNota=nUGs>1?` (consolidado de ${nUGs} UGs)`:'';
-    const saldoFonte=saldoAtKwh!=null?'banco':'medição';
-    const det=`GL M-1${ugNota}: ${Math.round(ijM1_kwh).toLocaleString('pt-BR')} kWh · Compensação total: ${Math.round(compTotal).toLocaleString('pt-BR')} kWh · Variação saldo (via ${saldoFonte}): ${Math.round(varSaldo).toLocaleString('pt-BR')} kWh · Potencial linhas vazias (${(pctVazia*100).toFixed(1)}%): ${Math.round(potVazio).toLocaleString('pt-BR')} kWh · Total explicado: ${Math.round(totalExp).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
+    // saldoFonteAt já definido acima
+    const det=`GL M-1${ugNota}: ${Math.round(ijM1_kwh).toLocaleString('pt-BR')} kWh · Compensação total: ${Math.round(compTotal).toLocaleString('pt-BR')} kWh · Variação saldo (via ${saldoFonteAt}): ${Math.round(varSaldo).toLocaleString('pt-BR')} kWh · Potencial linhas vazias (${(pctVazia*100).toFixed(1)}%): ${Math.round(potVazio).toLocaleString('pt-BR')} kWh · Total explicado: ${Math.round(totalExp).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
     const tipo=desvio<=0.05?'ok':desvio<=0.10?'warn':'danger';
     const dirMsg=sinal==='acima'
       ?`Compensação+saldo supera o GL M-1 em ${dp} — pode indicar reconhecimento de energia acima do registrado ou uso de saldo acumulado de meses anteriores. Recomenda-se analisar o histórico de IJ para verificar se houve reconhecimentos abaixo do esperado em períodos anteriores.`
@@ -541,17 +593,20 @@ function applyRules(ucs,ufv,mes,ugSummary){
       const exp=Math.max(0,u.consumo-u.taxMin);
       return s+(exp-u.compensada);
     },0);
-    // Variação real de saldo: saldo próximo mês vs saldo anterior (créditos provenientes)
-    const saldoTotalMes=comDados.reduce((s,u)=>s+u.saldo,0);
-    const saldoTotalAnt=comDados.reduce((s,u)=>s+(u.saldoAnt||0),0);
-    const varSaldoR6=saldoTotalMes-saldoTotalAnt; // negativo = consumindo créditos; positivo = acumulando
+    // Variação real de saldo: saldo atual = soma das UCs; saldo anterior = SALDO_DB (banco)
+    const saldoTotalMes=ucs.filter(u=>u.hasData||u.saldo>0).reduce((s,u)=>s+u.saldo,0);
+    // Buscar saldo do mês anterior no banco (referência confiável)
+    const mesM1R6=mes?prevMonth(mes):null;
+    const saldoDbM1=ufv&&mesM1R6?SALDO_DB[`${ufv}|${mesM1R6}`]:null;
+    const saldoTotalAnt=saldoDbM1!=null?saldoDbM1*1000:null; // banco em MWh → kWh
+    const varSaldoR6=saldoTotalAnt!=null?saldoTotalMes-saldoTotalAnt:null;
     // Melhoria potencial = quanto do crédito acumulado poderia cobrir o déficit
     const melhoriaKwh=Math.min(creditoAcum,deficit);
     const compTotal=comDados.reduce((s,u)=>s+u.compensada,0);
     const melhoriaPorc=compTotal>0?melhoriaKwh/compTotal:0;
     // Saldo crescendo = acúmulo contínuo → reforça revisão; diminuindo = lista consumindo créditos
-    const saldoCresce=varSaldoR6>0;
-    const temSaldoAnt=saldoTotalAnt>0;
+    const saldoCresce=varSaldoR6!=null&&varSaldoR6>0;
+    const temSaldoAnt=saldoTotalAnt!=null;
     let r6tipo='ok',r6msg='',r6det='';
     if(comSaldo.length>0&&subComp.length>0){
       const varSaldoStr=temSaldoAnt?(varSaldoR6>0
@@ -641,7 +696,7 @@ function topType(u){
   return'ok';
 }
 
-function renderResults(ucs,fileName,ufv,mes,ugSummary){
+function renderResults(ucs,fileName,ufv,mes,ugSummary,ipcaLabels=[]){
   // Alerta de status do arquivo
   const fileStatus=statusFromFileName(fileName);
   const statusChecks=[];
