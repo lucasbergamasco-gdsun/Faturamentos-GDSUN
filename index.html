@@ -110,6 +110,7 @@ footer{text-align:center;padding:2rem;font-size:12px;color:var(--text2);border-t
   <div class="client-selector">
     <button class="cbtn active" onclick="selectClient('magalu',this)">Magazine Luiza</button>
     <button class="cbtn" onclick="selectClient('raia',this)">Raia Drogasil</button>
+    <button class="cbtn" onclick="selectClient('tim',this)">TIM</button>
   </div>
   <div class="upload-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
@@ -200,7 +201,11 @@ function guessUFV(fileName){
 function prevMonth(ym){const[y,m]=ym.split('-').map(Number);return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`}
 
 // Detecta cliente pelo modelo selecionado
-function clienteLabel(){ return currentClient==='magalu'?'Magalu':'Raia Drogasil'; }
+function clienteLabel(){
+  if(currentClient==='magalu') return 'Magalu';
+  if(currentClient==='tim') return 'TIM';
+  return 'Raia Drogasil';
+}
 
 // Extrai mês de referência do nome do arquivo (ex: 04_26 ou 04_2026 → 2026-04)
 function mesFromFileName(fileName){
@@ -239,13 +244,15 @@ function handleFile(file){
         // Detectar modelo automaticamente pelas abas do arquivo
         const hasCalcOM=wb.SheetNames.some(n=>n.toLowerCase().includes('o&m')||n.toLowerCase().includes('lculo'));
         const hasUFV=wb.SheetNames.some(n=>/^UFV\d+$/.test(n)||n==='Medição'||n==='Medicao');
-        const clienteDetectado=hasCalcOM?'magalu':hasUFV?'raia':currentClient;
+        const hasRelatorio=wb.SheetNames.some(n=>n.toLowerCase().includes('relat')&&wb.SheetNames.length<=2);
+        const clienteDetectado=hasCalcOM?'magalu':hasUFV?'raia':hasRelatorio?'tim':currentClient;
         if(clienteDetectado!==currentClient){
           console.warn('Modelo detectado automaticamente: '+clienteDetectado+' (selecionado: '+currentClient+')');
         }
         if(clienteDetectado==='magalu') analyzeMagalu(wb,file.name);
         else if(clienteDetectado==='raia') analyzeRaia(wb,file.name);
-        else showError('Modelo não identificado. Verifique se o arquivo é um modelo Magalu ou Raia Drogasil.');
+        else if(clienteDetectado==='tim') analyzeTim(wb,file.name);
+        else showError('Modelo não identificado. Verifique se o arquivo é um modelo Magalu, Raia Drogasil ou TIM.');
       }catch(err){showError('Erro ao processar o arquivo. Verifique se é um modelo válido.')}
     },350);
   };
@@ -499,6 +506,100 @@ function analyzeRaia(wb,fileName){
   renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary,ipcaLabels);
 }
 
+// ── PARSER TIM ───────────────────────────────────────────────────────
+function analyzeTim(wb,fileName){
+  const sName=wb.SheetNames.find(n=>n.toLowerCase().includes('relat'))||wb.SheetNames[0];
+  const rawRows=XLSX.utils.sheet_to_json(wb.Sheets[sName],{header:1,defval:'',raw:false});
+
+  // Mês da fatura: linha 1, geralmente col G (índice 6) — primeiro valor tipo Date na linha 1
+  let detectedMes=null;
+  const mesesEn={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const row1=rawRows[0]||[];
+  for(const c of row1){
+    if(c instanceof Date){detectedMes=`${c.getFullYear()}-${String(c.getMonth()+1).padStart(2,'0')}`;break}
+    if(typeof c==='string'){
+      const dmIso=c.match(/(\d{4})-(\d{2})-\d{2}/);
+      if(dmIso){detectedMes=`${dmIso[1]}-${dmIso[2]}`;break}
+      // Formato inglês "Apr-26" ou "April-2026"
+      const dmEn=c.toLowerCase().match(/^([a-z]{3})[a-z]*-(\d{2,4})$/);
+      if(dmEn){
+        const mm=mesesEn[dmEn[1]];
+        if(mm){const yy=dmEn[2].length===2?'20'+dmEn[2]:dmEn[2];detectedMes=`${yy}-${String(mm).padStart(2,'0')}`;break}
+      }
+    }
+  }
+  if(!detectedMes) detectedMes=mesFromFileName(fileName);
+
+  // Header das UCs: linha com "Número da UC" e "% rateio"
+  const hRow=findHeaderRow(rawRows,['mero','rateio']);
+  if(!hRow){showError('Cabeçalho de UCs não encontrado. Verifique o modelo TIM.');return}
+
+  const cols={
+    uc:      colIdx(hRow,['mero','UC']),
+    icms:    colIdx(hRow,['ICMS']),
+    pis:     colIdx(hRow,['PIS']),
+    cofins:  colIdx(hRow,['COFINS']),
+    economiaPct:colIdx(hRow,['Economia']),
+    taxMin:  colIdx(hRow,['Disponibilidade','kWh']),
+    consumo: colIdx(hRow,['Energia Total','Consumida']),
+    comp:    colIdx(hRow,['Compensada']),
+    credFP:  colIdx(hRow,['Cr\u00e9ditos Dispon\u00edveis FP']),
+    credP:   colIdx(hRow,['Cr\u00e9ditos Dispon\u00edveis P']),
+    pct:     colIdx(hRow,['% rateio','rateio']),
+  };
+
+  let allUCs=[];
+  const start=rawRows.indexOf(hRow)+1;
+  for(let i=start;i<rawRows.length;i++){
+    const r=rawRows[i];
+    const ucVal=r[cols.uc];
+    if(!ucVal||String(ucVal).trim()===''||String(ucVal).toLowerCase().includes('total')) break;
+    const consumo=pf(r[cols.consumo]);
+    const taxMin=cols.taxMin>=0?pf(r[cols.taxMin]):0;
+    const credFP=cols.credFP>=0?pf(r[cols.credFP]):0;
+    const credP=cols.credP>=0?pf(r[cols.credP]):0;
+    allUCs.push({
+      uc:String(ucVal).trim(),ug:sName,
+      pct:pf(r[cols.pct]),consumo,
+      compensada:pf(r[cols.comp]),
+      saldo:credFP+credP, // créditos disponíveis acumulados (FP+P) — equivalente ao saldo
+      saldoAnt:0, // não informado neste modelo por UC
+      pis:pf(r[cols.pis]),cofins:pf(r[cols.cofins]),icms:pf(r[cols.icms]),
+      hasData:consumo>0,
+      taxMin:taxMin>0?taxMin:100,
+      issues:[],
+    });
+  }
+  if(!allUCs.length){showError('Nenhuma UC encontrada. Verifique o modelo TIM.');return}
+
+  // Seção "Unidades Geradoras" — IJ (Energia Gerada) e IPCA
+  let ugSummary=[],ipcaLabels=[];
+  const ugSectionIdx=rawRows.findIndex(r=>r.some(c=>String(c).trim()==='Unidades Geradoras'));
+  if(ugSectionIdx>=0){
+    const ugHRow=rawRows.slice(ugSectionIdx+1).find(r=>r.some(c=>String(c).includes('Usina'))&&r.some(c=>String(c).includes('Energia Gerada')));
+    if(ugHRow){
+      const ugStart=rawRows.indexOf(ugHRow)+1;
+      const ucIdx=ugHRow.findIndex(h=>String(h).toLowerCase().includes('mero'));
+      const usinaIdx=ugHRow.findIndex(h=>String(h).includes('Usina'));
+      const ijIdx=ugHRow.findIndex(h=>String(h).includes('Energia Gerada')&&String(h).includes('kWh'));
+      const ipcaIdxs=ugHRow.map((h,i)=>String(h).toUpperCase().includes('IPCA')?i:-1).filter(i=>i>=0);
+      if(ipcaIdxs.length) ipcaLabels=ipcaIdxs.map(i=>ugHRow[i]);
+      for(let i=ugStart;i<rawRows.length;i++){
+        const r=rawRows[i];
+        const usina=r[usinaIdx];
+        if(!usina||String(usina).trim()===''||String(usina).toLowerCase().includes('total')) break;
+        // Especificidade da concessionária: para esta UFV, a Energia Gerada reportada na
+        // fatura refere-se ao mês ANTERIOR ao mês da fatura (defasagem de faturamento).
+        const usinaTrim=String(usina).trim();
+        const mesReferenciaIJ=(usinaTrim.includes('Presidente Epitácio')&&detectedMes)?prevMonth(detectedMes):detectedMes;
+        ugSummary.push({ug:usinaTrim,injecao:pf(r[ijIdx]),saldoUG:0,mes:mesReferenciaIJ});
+      }
+    }
+  }
+
+  renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary,ipcaLabels);
+}
+
 // ── REGRAS ───────────────────────────────────────────────────────────
 function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[]){
   const mesM1=mes?prevMonth(mes):null;
@@ -522,6 +623,29 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[]){
       }
     }
 
+    // Regra 1b — UC no consumo mínimo (sem excedente a compensar) mas ainda com rateio ativo
+    // Não é erro de faturamento — é esperado que não compense quando consumo ≤ taxa mínima.
+    // O ponto de atenção é outro: rateio ativo aqui significa injeção sendo destinada a uma UC
+    // que não consegue aproveitá-la. Sugerir zerar o rateio e acompanhar via crédito.
+    if(u.hasData&&exp<=0&&u.consumo>0&&u.pct>0){
+      u.issues.push({type:'info',rule:1,msg:`UC está no consumo mínimo (${Math.round(u.consumo).toLocaleString('pt-BR')} kWh, taxa mínima de ${Math.round(u.taxMin).toLocaleString('pt-BR')} kWh) e por isso não compensa créditos — isso é esperado pela regra de faturamento, não um erro. Como a UC ainda possui % de rateio (${(u.pct*100).toFixed(2)}%), sugere-se zerar o rateio desta UC e redirecioná-lo para outras UCs, acompanhando os créditos acumulados.`});
+    }
+
+    // Regra 1c — Consumo acima da taxa mínima (há excedente a compensar) mas compensação
+    // zerada e SEM saldo registrado. Diferente da Regra 1 (que cobre o caso com saldo > 0),
+    // aqui não há saldo explicando a ausência de compensação. Dois sub-casos:
+    if(u.hasData&&exp>0&&u.compensada===0&&u.saldo===0){
+      if(u.pct===0){
+        // Sem rateio atribuído: a UC simplesmente não recebe injeção, então não compensa.
+        // Sugestão é o oposto da Regra 1b — atribuir rateio para que volte a compensar.
+        u.issues.push({type:'warn',rule:1,msg:`UC possui consumo de ${Math.round(u.consumo).toLocaleString('pt-BR')} kWh, acima da taxa mínima (${Math.round(u.taxMin).toLocaleString('pt-BR')} kWh), mas está com % de rateio zerado — não recebe injeção e por isso não compensa. Recomenda-se revisar a lista de rateio e atribuir um percentual a esta UC para que volte a compensar nos próximos ciclos.`});
+      } else {
+        // Tem rateio mas mesmo assim não compensou nem gerou saldo — pode ser falha
+        // na consolidação dos dados de fatura pelo nosso sistema.
+        u.issues.push({type:'danger',rule:1,msg:`UC possui consumo de ${Math.round(u.consumo).toLocaleString('pt-BR')} kWh, acima da taxa mínima (${Math.round(u.taxMin).toLocaleString('pt-BR')} kWh), gerando excedente de ${Math.round(exp).toLocaleString('pt-BR')} kWh a compensar, e possui % de rateio (${(u.pct*100).toFixed(2)}%) — mas a compensação está zerada e não há saldo registrado. Pode ser falha na consolidação dos dados de fatura pelo sistema, ou ausência real de compensação pela distribuidora. Recomenda-se verificar a fatura original desta UC.`});
+      }
+    }
+
     // Regra 3 — Impostos zerados
     if(u.hasData){
       if(u.pis===0)    u.issues.push({type:'danger',rule:3,msg:'PIS zerado na fatura.'});
@@ -542,8 +666,10 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[]){
     // Saldo atual: banco se disponível, senão soma das UCs da medição
     const saldoAtKwh=saldoAt!=null?saldoAt*1000:null;
     const saldoUCsKwh=ucs.filter(u=>u.hasData||u.saldo>0).reduce((s,u)=>s+u.saldo,0);
-    const saldoAtEfetivo=saldoAtKwh!=null?saldoAtKwh:saldoUCsKwh;
-    const saldoFonteAt=saldoAtKwh!=null?'banco':'medição';
+    // A medição é o dado mais atual e confiável para o mês em análise — prioriza sobre o banco,
+    // que pode conter valores provisórios lançados antes do fechamento mensal.
+    const saldoAtEfetivo=saldoUCsKwh>0?saldoUCsKwh:saldoAtKwh;
+    const saldoFonteAt=saldoUCsKwh>0?'medição':'banco';
     const varSaldo=saldoM1Kwh!=null?saldoAtEfetivo-saldoM1Kwh:0;
     const pctVazia=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct,0);
     const potVazio=pctVazia*ijM1_kwh;
