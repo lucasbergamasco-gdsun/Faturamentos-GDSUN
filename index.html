@@ -143,6 +143,22 @@ header{gap:1rem}
 .gd-head{font-size:11px;color:var(--text2);padding:4px 0 6px;border-bottom:.5px solid var(--border)}
 .gd-row{padding:5px 0;border-bottom:.5px solid var(--border)}
 .gd-row:last-child{border-bottom:none}
+.gd-row.clic{cursor:pointer;border-radius:var(--r8);margin:0 -8px;padding:5px 8px}
+.gd-row.clic:hover{background:var(--bg2)}
+.gd-row.clic:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.gd-row.aberta{background:var(--bg2);border-bottom-color:transparent}
+.gd-row .gd-sig::after{content:'';display:inline-block;width:5px;height:5px;margin-left:7px;vertical-align:3px;border-right:1.5px solid var(--text2);border-bottom:1.5px solid var(--text2);transform:rotate(45deg);transition:transform .15s}
+.gd-row.aberta .gd-sig::after{transform:rotate(-135deg);vertical-align:0}
+.gd-det{background:var(--bg2);border-radius:0 0 var(--r8) var(--r8);margin:0 -8px 6px;padding:4px 12px 12px;border-bottom:.5px solid var(--border)}
+.gd-det-hdr{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.gd-det-hdr strong{font-size:13px;font-weight:500}
+.gd-det-stats{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-left:auto}
+.gd-det-stats b{font-weight:500}
+.gd-chart{width:100%;overflow-x:auto}
+.gd-chart svg{display:block;width:100%;min-width:520px;height:auto}
+.gd-chart text{font-family:var(--font)}
+.gd-det-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-top:4px}
+.gd-det-leg span{display:inline-flex;align-items:center;gap:6px}
 .gd-sig{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gd-bar{display:flex;align-items:center;gap:8px}
 .gd-bar-bg{flex:1;height:8px;border-radius:4px;background:var(--bg2);overflow:hidden}
@@ -246,7 +262,7 @@ header{gap:1rem}
     </div>
     <div id="gdWrap" style="display:none">
       <div class="gd-ctrl">
-        <label>Cliente <select id="gdCliente" class="map-sel" onchange="gdCli=this.value;painelMesesCliente();painelBuild()"></select></label>
+        <label>Cliente <select id="gdCliente" class="map-sel" onchange="gdCli=this.value;Object.keys(gdAberta).forEach(k=>gdAberta[k]=null);painelMesesCliente();painelBuild()"></select></label>
         <div class="gd-mes-nav" role="group" aria-label="Mês de análise">
           <span class="muted">Mês de análise</span>
           <button class="btn btn-ghost gd-seta" onclick="painelMes(1)" aria-label="Mês anterior"><i class="ti ti-chevron-left"></i></button>
@@ -1831,9 +1847,101 @@ function gdBar(v){
 function gdRows(id,key){
   const lista=painelUsinas().map(u=>({...u,vv:u.vig?u.vig[key]:null,uv:gdAvg(u.u12,key)}))
     .filter(x=>x.vv!=null||x.uv!=null).sort((a,b)=>(a.vv??a.uv??999)-(b.vv??b.uv??999));
-  document.getElementById(id).innerHTML=lista.length?lista.map(x=>`<div class="gd-row">
-    <div class="gd-sig" title="${esc(x.ufv)}">${esc(x.sig)}</div>${gdBar(x.vv)}<div class="gd-12m">${gdBar(x.uv)}</div></div>`).join('')
+  const el=document.getElementById(id);
+  el.innerHTML=lista.length?lista.map(x=>`<div class="gd-row clic" role="button" tabindex="0" aria-expanded="false" data-sig="${esc(x.sig)}" title="${esc(x.ufv)} — clique para ver mês a mês">
+    <div class="gd-sig">${esc(x.sig)}</div>${gdBar(x.vv)}<div class="gd-12m">${gdBar(x.uv)}</div></div>`).join('')
     :'<p class="muted" style="padding:6px 0">Sem dados para o período.</p>';
+  el.querySelectorAll('.gd-row.clic').forEach(r=>{
+    r.onclick=()=>gdToggle(id,key,r.dataset.sig);
+    r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();gdToggle(id,key,r.dataset.sig)}};
+  });
+  // Mantém aberta a usina que estava aberta ao trocar mês/cliente
+  if(gdAberta[id]&&lista.some(x=>x.sig===gdAberta[id]))gdAbrir(id,key,gdAberta[id]);else gdAberta[id]=null;
+}
+
+// ── Detalhe mensal da usina (um por painel) ──────────────────────────
+const gdAberta={};
+const GD_IND={cp_gl:{nome:'Eficiência de compensação',f:'CP / GL',max:300},
+              cp_ds_gl:{nome:'Reconhecimento total',f:'(CP + ΔSaldo) / GL',max:300},
+              ij_gl:{nome:'Reconhecimento pela concessionária',f:'IJ / GL',max:300}};
+function gdToggle(id,key,sig){
+  if(gdAberta[id]===sig){gdFechar(id);return}
+  gdFechar(id);gdAbrir(id,key,sig);
+}
+function gdFechar(id){
+  const el=document.getElementById(id);
+  el.querySelectorAll('.gd-det').forEach(d=>d.remove());
+  el.querySelectorAll('.gd-row.aberta').forEach(r=>{r.classList.remove('aberta');r.setAttribute('aria-expanded','false')});
+  gdAberta[id]=null;
+}
+function gdAbrir(id,key,sig){
+  const el=document.getElementById(id);
+  const row=[...el.querySelectorAll('.gd-row.clic')].find(r=>r.dataset.sig===sig);
+  const u=GD[gdCli]&&GD[gdCli].usinas[sig];if(!row||!u)return;
+  gdAberta[id]=sig;row.classList.add('aberta');row.setAttribute('aria-expanded','true');
+  // Janela de 12 meses terminando no mês de análise (meses sem dado aparecem vazios)
+  const meses=[];for(let i=11;i>=0;i--)meses.push(ymAdd(gdMes,-i));
+  const por={};u.serie.forEach(d=>por[d.mes]=d);
+  const pts=meses.map(m=>({mes:m,d:por[m]||null,v:por[m]?por[m][key]:null}));
+  const ind=GD_IND[key];
+  const validos=pts.filter(p=>p.v!=null&&p.v>0&&p.v<ind.max);
+  const media=gdAvg(pts.map(p=>p.d).filter(Boolean),key,ind.max);
+  const pior=validos.length?validos.reduce((a,b)=>b.v<a.v?b:a):null;
+  const melhor=validos.length?validos.reduce((a,b)=>b.v>a.v?b:a):null;
+  const abaixo=validos.filter(p=>p.v<95).length;
+  const refs=[...new Set(pts.filter(p=>p.d).map(p=>p.d.gc))];
+  const refTxt=key==='ij_gl'?'GL do mês':refs.length===1?(refs[0]?'GL do mês':'GL(m-1)'):'GL do mês (Ger. Compartilhada) ou GL(m-1) (Autoconsumo)';
+  const det=document.createElement('div');det.className='gd-det';
+  det.innerHTML=`<div class="gd-det-hdr">
+      <strong>${esc(sig)} · ${esc(u.ufv)}</strong><span class="muted">${ind.f.replace('GL',refTxt)}</span>
+      <div class="gd-det-stats">
+        <span>Média 12m <b style="color:${gdColor(media)}">${media!=null?media.toLocaleString('pt-BR')+'%':'—'}</b></span>
+        <span>Melhor <b>${melhor?ymLabel(melhor.mes)+' '+melhor.v.toLocaleString('pt-BR')+'%':'—'}</b></span>
+        <span>Pior <b style="color:${pior?gdColor(pior.v):'inherit'}">${pior?ymLabel(pior.mes)+' '+pior.v.toLocaleString('pt-BR')+'%':'—'}</b></span>
+        <span>Abaixo de 95% <b>${abaixo} de ${validos.length}</b></span>
+      </div></div>
+    <div class="gd-chart">${gdGrafico(pts,media,ind.max)}</div>
+    <div class="gd-det-leg">
+      <span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="#639922" stroke-width="1.5" stroke-dasharray="4 3"/></svg>Meta 95%</span>
+      ${media!=null?`<span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.5 3"/></svg>Média 12m ${media.toLocaleString('pt-BR')}%</span>`:''}
+      ${pts.some(p=>p.v!=null&&!(p.v>0&&p.v<ind.max))?'<span><svg width="12" height="10" aria-hidden="true"><rect x="1" y="1" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2 1.5"/></svg>Fora da média (zero, negativo ou acima do limite)</span>':''}
+      ${pts.some(p=>p.v==null)?'<span>— sem dado no mês</span>':''}
+    </div>`;
+  row.after(det);
+}
+function gdGrafico(pts,media,max){
+  const W=720,H=230,L=40,R=12,T=22,B=30,pw=W-L-R,ph=H-T-B;
+  const vals=pts.map(p=>p.v).filter(v=>v!=null);
+  // Escala: 0 a 110% no mínimo; estende até 150% e desce até -50% se houver valores assim
+  const yMax=Math.min(150,Math.max(110,Math.ceil(Math.max(0,...vals)/10)*10));
+  const yMin=Math.max(-50,Math.min(0,Math.floor(Math.min(0,...vals)/10)*10));
+  const y=v=>T+(yMax-Math.max(yMin,Math.min(yMax,v)))/(yMax-yMin)*ph;
+  const bw=pw/pts.length,barW=Math.min(34,bw*.62);
+  let g='';
+  // Grade
+  for(let t=Math.ceil(yMin/25)*25;t<=yMax;t+=25){
+    g+=`<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--border)" stroke-width="${t===0?1:.5}"/>
+        <text x="${L-6}" y="${y(t)+3.5}" text-anchor="end" font-size="10" fill="var(--text2)">${t}%</text>`;
+  }
+  // Linha de 95% (meta)
+  g+=`<line x1="${L}" x2="${W-R}" y1="${y(95)}" y2="${y(95)}" stroke="#639922" stroke-width="1" stroke-dasharray="4 3"/>`;
+  if(media!=null&&media<=yMax)g+=`<line x1="${L}" x2="${W-R}" y1="${y(media)}" y2="${y(media)}" stroke="var(--text2)" stroke-width="1.2" stroke-dasharray="1.5 3"/>`;
+  pts.forEach((p,i)=>{
+    const cx=L+bw*i+bw/2,x=cx-barW/2;
+    g+=`<text x="${cx}" y="${H-10}" text-anchor="middle" font-size="10" fill="var(--text2)">${ymLabel(p.mes)}</text>`;
+    if(p.v==null){g+=`<text x="${cx}" y="${y(0)-5}" text-anchor="middle" font-size="10" fill="var(--text2)">—</text>`;return}
+    if(Object.is(p.v,-0))p.v=0;
+    const fora=!(p.v>0&&p.v<max),cor=gdColor(p.v);
+    const y0=y(0),y1=y(p.v),top=Math.min(y0,y1),alt=Math.max(1.5,Math.abs(y1-y0));
+    const cortado=p.v>yMax||p.v<yMin;
+    const dica=`${ymLabel(p.mes)}: ${p.v.toLocaleString('pt-BR')}%${p.d?' · base '+(p.d.gc?'GL do mês':'GL(m-1)'):''}${fora?' · fora da média':''}`;
+    g+=`<g><title>${dica}</title><rect x="${x}" y="${top}" width="${barW}" height="${alt}" rx="3" fill="${cor}" ${fora?`fill-opacity=".25" stroke="${cor}" stroke-dasharray="3 2"`:''}/>`;
+    const ly=p.v>=0?top-5:top+alt+11;
+    const tY=Math.max(11,Math.min(H-B-2,ly)),tTxt=`${cortado?(p.v>0?'▲ ':'▼ '):''}${p.v.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`;
+    g+=`<text x="${cx}" y="${tY}" text-anchor="middle" font-size="10" font-weight="500" fill="none" stroke="var(--bg2)" stroke-width="3" stroke-linejoin="round">${tTxt}</text>
+        <text x="${cx}" y="${tY}" text-anchor="middle" font-size="10" font-weight="500" fill="${cor}">${tTxt}</text></g>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Indicador mês a mês nos últimos 12 meses">${g}</svg>`;
 }
 function gdCritico(id,key,max,cols,vazio){
   const crit=[];
