@@ -284,7 +284,7 @@ header{gap:1rem}
         <span><span class="gd-dot" style="background:#639922"></span>≥ 95% ok</span>
         <span><span class="gd-dot" style="background:#BA7517"></span>85 a 94% atenção</span>
         <span><span class="gd-dot" style="background:#E24B4A"></span>&lt; 85% crítico</span>
-        <span>Barra escura: mês final. Barra clara: média do período. Clique numa usina para ver mês a mês.</span>
+        <span>Barra escura: mês final. Barra clara: média do período, ponderada pela energia (Σ reconhecido ÷ Σ gerado). Clique numa usina para ver mês a mês.</span>
       </div>
 
       <section class="gd-panel">
@@ -1571,7 +1571,9 @@ function buildPainel(recs){
           cp_cons:a.cp!=null&&a.consumo>0?r1(a.cp/a.consumo*100):null,
           // Diferença em MWh: reconhecido − gerado (negativo = energia não reconhecida)
           dif_ds:a.cp!=null&&glP>0?(a.cp+ds)-glP:null,
-          dif_ij:a.ij!=null&&a.gl>0?a.ij-a.gl:null};
+          dif_ij:a.ij!=null&&a.gl>0?a.ij-a.gl:null,
+          // Energias do mês (MWh) usadas na média ponderada do período
+          _cp:a.cp??null,_rec:a.cp!=null?a.cp+ds:null,_glr:glP>0?glP:null,_ij:a.ij??null,_gl:a.gl>0?a.gl:null,_cons:a.consumo>0?a.consumo:null};
         if(a.cp>0){mesesCP.add(mes);mc.add(mes)}
         return o;
       }).filter(o=>o.cp_gl!=null||o.cp_ds_gl!=null||o.ij_gl!=null);
@@ -1820,8 +1822,12 @@ function copiarCaminho(){navigator.clipboard?.writeText(CAMINHO_PADRAO).then(()=
 //  PAINEL GD
 // ═════════════════════════════════════════════════════════════════════
 const gdColor=v=>v==null?'#888780':v>=95?'#639922':v>=85?'#BA7517':'#E24B4A';
-const gdAvg=(lst,key,max=300)=>{const vals=(lst||[]).map(d=>d[key]).filter(v=>v!=null&&v>0&&v<max);
-  return vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10:null};
+// Média do período PONDERADA pela energia: Σ numerador ÷ Σ denominador dos meses válidos
+// (mesmo filtro de meses usado na soma em MWh, então % e MWh sempre apontam na mesma direção)
+const GD_ND={cp_gl:['_cp','_glr'],cp_ds_gl:['_rec','_glr'],ij_gl:['_ij','_gl'],cp_cons:['_cp','_cons']};
+const gdAvg=(lst,key,max=300)=>{const[nk,dk]=GD_ND[key];let n=0,d=0;
+  (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&v>0&&v<max&&x[nk]!=null&&x[dk]>0){n+=x[nk];d+=x[dk]}});
+  return d>0?Math.round(n/d*1000)/10:null};
 let gdCli=null,gdMes=null,gdIni=null,gdSpan=11; // gdSpan = meses entre o inicial e o final (11 → 12 meses)
 const ymDiff=(a,b)=>{const[y1,m1]=a.split('-').map(Number),[y2,m2]=b.split('-').map(Number);return (y2-y1)*12+(m2-m1)};
 const gdN=()=>ymDiff(gdIni,gdMes)+1;
@@ -2010,11 +2016,9 @@ function gdGrafico(pts,media,o={}){
 function gdCritico(id,key,max,cols,vazio){
   const crit=[];
   painelUsinas().forEach(u=>{
-    const vals=u.u12.map(d=>d[key]).filter(v=>v!=null&&v>0&&v<max);
-    if(!vals.length)return;
-    const media=vals.reduce((a,b)=>a+b,0)/vals.length;
-    if(media>=95)return;
-    crit.push({...u,media:Math.round(media*10)/10,
+    const media=gdAvg(u.u12,key,max);
+    if(media==null||media>=95)return;
+    crit.push({...u,media,
       meses:u.u12.filter(d=>d[key]!=null&&d[key]>0&&d[key]<max).sort((a,b)=>a[key]-b[key]).slice(0,3)});
   });
   crit.sort((a,b)=>a.media-b.media);
