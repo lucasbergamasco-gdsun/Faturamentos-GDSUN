@@ -129,9 +129,12 @@ header{gap:1rem}
 
 /* ── Painel GD ── */
 .gd-ctrl{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:1rem}
-.rel-panel{background:var(--bg);border:.5px solid var(--border);border-radius:var(--r12);padding:1rem 1.25rem;margin-bottom:1rem}
-.rel-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.rel-hdr strong{font-size:14px;font-weight:500}
+.rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.rel-card{background:var(--bg);border:.5px solid var(--border);border-radius:var(--r12);padding:1rem 1.25rem}
+.rel-card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rel-card-hdr strong{font-size:15px;font-weight:500}
+.rel-ico{width:34px;height:34px;border-radius:var(--r8);background:var(--blue-bg);color:var(--blue);display:inline-flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.rel-novo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:var(--text2);border-style:dashed;background:transparent;min-height:140px;font-size:13px}
 .gd-ctrl label{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:8px}
 .gd-ctrl .map-sel{width:auto}
 .gd-mes-nav{display:flex;align-items:center;gap:4px;background:var(--bg);border:.5px solid var(--border);border-radius:var(--r8);padding:3px 4px 3px 12px}
@@ -202,6 +205,7 @@ header{gap:1rem}
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
   <button class="tab" role="tab" data-tab="validador" onclick="goTab('validador')"><i class="ti ti-file-check"></i> Validador de medições</button>
   <button class="tab" role="tab" data-tab="painel" onclick="goTab('painel')"><i class="ti ti-chart-bar"></i> Painel GD</button>
+  <button class="tab" role="tab" data-tab="relatorios" onclick="goTab('relatorios')"><i class="ti ti-file-analytics"></i> Relatórios</button>
   <button class="tab" role="tab" data-tab="base" onclick="goTab('base')"><i class="ti ti-database"></i> Base de dados</button>
 </div></nav>
 <main>
@@ -282,19 +286,7 @@ header{gap:1rem}
         </div>
         <button class="btn btn-ghost" id="gdReset" onclick="painelUltimos12()" hidden><i class="ti ti-rotate"></i> Últimos 12 meses</button>
         <span id="gdBadge"></span>
-        <button class="btn" id="relBtn" onclick="relAbrir()" aria-expanded="false" aria-controls="relPanel" style="margin-left:auto"><i class="ti ti-presentation"></i> Exportar relatório</button>
       </div>
-      <section class="rel-panel" id="relPanel" hidden>
-        <div class="rel-hdr"><strong>Relatório de Gestão de Energia (PowerPoint)</strong>
-          <button class="btn btn-ghost" onclick="relAbrir()" aria-label="Fechar"><i class="ti ti-x"></i></button></div>
-        <p class="muted">Conceitos, avaliação por competência dos últimos 12 meses e o acumulado desde o COD de cada cliente (Autoconsumo Remoto e Geração Compartilhada), com gráficos editáveis no PowerPoint.</p>
-        <div class="src-actions">
-          <label class="muted" style="display:flex;align-items:center;gap:8px">Mês de referência <select id="relRef" class="map-sel" style="width:auto"></select></label>
-          <button class="btn btn-primary" id="relGerar" onclick="relExportar()"><i class="ti ti-download"></i> Gerar PowerPoint</button>
-          <span class="muted" id="relStatus" role="status"></span>
-        </div>
-        <p class="hint" id="relResumo"></p>
-      </section>
       <div class="gd-legend">
         <span><span class="gd-dot" style="background:#639922"></span>≥ 95% ok</span>
         <span><span class="gd-dot" style="background:#BA7517"></span>85 a 94% atenção</span>
@@ -317,6 +309,15 @@ header{gap:1rem}
         <div id="gdCrit2"></div>
       </section>
       <section class="gd-panel">
+        <h3>Reconhecimento total sobre a injetada</h3><p class="gd-sub" data-f="(CP + ΔSaldo) / {IJ}"></p><p class="gd-sub gd-sub-mwh">Ao lado do %, a diferença em MWh: (CP + ΔSaldo) − IJ. Negativo é energia injetada que não foi reconhecida; no período, soma dos meses que entram na média.</p>
+        <div class="gd-head"><div>Usina</div><div class="gd-hdr-vig"></div><div class="gd-hdr-12"></div></div>
+        <div id="gdRows4"></div>
+      </section>
+      <section class="gd-panel crit">
+        <h3>Meses críticos do reconhecimento total sobre a injetada</h3><p class="gd-sub">Usinas com média abaixo de 95% em <span class="gd-per"></span>, com os três piores meses de cada uma</p>
+        <div id="gdCrit4"></div>
+      </section>
+      <section class="gd-panel">
         <h3>Reconhecimento pela concessionária</h3><p class="gd-sub">IJ / GL</p><p class="gd-sub gd-sub-mwh">Ao lado do %, a diferença em MWh: IJ − GL. Negativo é geração não injetada; no período, soma dos meses que entram na média.</p>
         <div class="gd-head"><div>Usina</div><div class="gd-hdr-vig"></div><div class="gd-hdr-12"></div></div>
         <div id="gdRows3"></div>
@@ -324,6 +325,30 @@ header{gap:1rem}
       <section class="gd-panel crit">
         <h3>Meses críticos do reconhecimento pela concessionária</h3><p class="gd-sub">Usinas com IJ / GL médio abaixo de 95% em <span class="gd-per"></span>, com os três piores meses de cada uma</p>
         <div id="gdCrit3"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-relatorios" role="tabpanel" hidden>
+    <div style="margin-bottom:1.5rem">
+      <h1 style="font-size:22px;font-weight:500;margin-bottom:4px">Relatórios</h1>
+      <p style="font-size:14px;color:var(--text2)">Relatórios gerados a partir da base Controle_GdE carregada no portal.</p>
+    </div>
+    <div class="rel-grid">
+      <section class="rel-card">
+        <div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-presentation"></i></span>
+          <div><strong>RCA Mensal</strong><span class="muted"> · PowerPoint</span></div></div>
+        <p class="muted">Conceitos, avaliação por competência dos últimos 12 meses e o acumulado desde o COD de cada cliente (Autoconsumo Remoto e Geração Compartilhada), com gráficos editáveis no PowerPoint.</p>
+        <div class="src-actions">
+          <label class="muted" style="display:flex;align-items:center;gap:8px">Mês de referência <select id="relRef" class="map-sel" style="width:auto"></select></label>
+          <button class="btn btn-primary" id="relGerar" onclick="relExportar()"><i class="ti ti-download"></i> Gerar PowerPoint</button>
+          <span class="muted" id="relStatus" role="status"></span>
+        </div>
+        <p class="hint" id="relResumo"></p>
+      </section>
+      <section class="rel-card rel-novo" aria-label="Novos modelos">
+        <i class="ti ti-file-plus" style="font-size:22px"></i>
+        <p>Novos modelos de relatório aparecerão aqui.</p>
       </section>
     </div>
   </div>
@@ -1599,20 +1624,24 @@ function buildPainel(recs){
         //   Autoconsumo Remoto    → GL do mês anterior
         const gc=isGC(a.mod||u.mod);
         const glP=gc?a.gl:p.gl;
+        // Mesma regra para a IJ de referência: IJ do mês (Ger. Compartilhada) ou IJ(m-1) (Autoconsumo Remoto)
+        const ijP=gc?a.ij:p.ij;
         const ds=(a.saldo!=null&&p.saldo!=null)?a.saldo-p.saldo:0;
         const o={mes,m:ymLabel(mes),gc,
           cp_gl:a.cp!=null&&glP>0?r1(a.cp/glP*100):null,
           cp_ds_gl:a.cp!=null&&glP>0?r1((a.cp+ds)/glP*100):null,
+          cp_ds_ij:a.cp!=null&&ijP>0?r1((a.cp+ds)/ijP*100):null,
           ij_gl:a.ij!=null&&a.gl>0?r1(a.ij/a.gl*100):null,
           cp_cons:a.cp!=null&&a.consumo>0?r1(a.cp/a.consumo*100):null,
           // Diferença em MWh: reconhecido − gerado (negativo = energia não reconhecida)
           dif_ds:a.cp!=null&&glP>0?(a.cp+ds)-glP:null,
           dif_ij:a.ij!=null&&a.gl>0?a.ij-a.gl:null,
+          dif_dsij:a.cp!=null&&ijP>0?(a.cp+ds)-ijP:null,
           // Energias do mês (MWh) usadas na média ponderada do período
-          _cp:a.cp??null,_rec:a.cp!=null?a.cp+ds:null,_glr:glP>0?glP:null,_ij:a.ij??null,_gl:a.gl>0?a.gl:null,_cons:a.consumo>0?a.consumo:null};
+          _cp:a.cp??null,_rec:a.cp!=null?a.cp+ds:null,_glr:glP>0?glP:null,_ij:a.ij??null,_gl:a.gl>0?a.gl:null,_cons:a.consumo>0?a.consumo:null,_ijr:ijP>0?ijP:null};
         if(a.cp>0){mesesCP.add(mes);mc.add(mes)}
         return o;
-      }).filter(o=>o.cp_gl!=null||o.cp_ds_gl!=null||o.ij_gl!=null);
+      }).filter(o=>o.cp_gl!=null||o.cp_ds_gl!=null||o.cp_ds_ij!=null||o.ij_gl!=null);
     });
     c.meses=[...mc].sort().reverse();
   });
@@ -1860,7 +1889,7 @@ function copiarCaminho(){navigator.clipboard?.writeText(CAMINHO_PADRAO).then(()=
 const gdColor=v=>v==null?'#888780':v>=95?'#639922':v>=85?'#BA7517':'#E24B4A';
 // Média do período PONDERADA pela energia: Σ numerador ÷ Σ denominador dos meses válidos
 // (mesmo filtro de meses usado na soma em MWh, então % e MWh sempre apontam na mesma direção)
-const GD_ND={cp_gl:['_cp','_glr'],cp_ds_gl:['_rec','_glr'],ij_gl:['_ij','_gl'],cp_cons:['_cp','_cons']};
+const GD_ND={cp_gl:['_cp','_glr'],cp_ds_gl:['_rec','_glr'],cp_ds_ij:['_rec','_ijr'],ij_gl:['_ij','_gl'],cp_cons:['_cp','_cons']};
 const gdAvg=(lst,key,max=300)=>{const[nk,dk]=GD_ND[key];let n=0,d=0;
   (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&v>0&&v<max&&x[nk]!=null&&x[dk]>0){n+=x[nk];d+=x[dk]}});
   return d>0?Math.round(n/d*1000)/10:null};
@@ -1870,6 +1899,7 @@ const gdN=()=>ymDiff(gdIni,gdMes)+1;
 const gdPerTxt=()=>gdIni===gdMes?ymLabel(gdMes):`${ymLabel(gdIni)} a ${ymLabel(gdMes)}`;
 
 function painelInit(){
+  try{relPreparar()}catch(e){console.error(e)}
   const wrap=document.getElementById('gdWrap'),empty=document.getElementById('gdEmpty');
   const clis=Object.keys(GD).sort((a,b)=>a.localeCompare(b,'pt-BR'));
   if(!clis.length||!GD_MESES.length){wrap.style.display='none';empty.style.display='block';return}
@@ -1937,6 +1967,7 @@ function gdRows(id,key){
 const gdAberta={};
 const GD_IND={cp_gl:{nome:'Eficiência de compensação',f:'CP / GL',max:300},
               cp_ds_gl:{nome:'Reconhecimento total',f:'(CP + ΔSaldo) / GL',max:300},
+              cp_ds_ij:{nome:'Reconhecimento total sobre a injetada',f:'(CP + ΔSaldo) / IJ',max:300,base:'IJ'},
               ij_gl:{nome:'Reconhecimento pela concessionária',f:'IJ / GL',max:300}};
 function gdToggle(id,key,sig){
   if(gdAberta[id]===sig){gdFechar(id);return}
@@ -1964,10 +1995,11 @@ function gdAbrir(id,key,sig){
   const melhor=validos.length?validos.reduce((a,b)=>b.v>a.v?b:a):null;
   const abaixo=validos.filter(p=>p.v<95).length;
   const refs=[...new Set(pts.filter(p=>p.d).map(p=>p.d.gc))];
-  const refTxt=key==='ij_gl'?'GL do mês':refs.length===1?(refs[0]?'GL do mês':'GL(m-1)'):'GL do mês (Ger. Compartilhada) ou GL(m-1) (Autoconsumo)';
+  const B=ind.base||'GL';
+  const refTxt=key==='ij_gl'?'GL do mês':refs.length===1?(refs[0]?`${B} do mês`:`${B}(m-1)`):`${B} do mês (Ger. Compartilhada) ou ${B}(m-1) (Autoconsumo)`;
   const det=document.createElement('div');det.className='gd-det';
   det.innerHTML=`<div class="gd-det-hdr">
-      <strong>${esc(sig)} · ${esc(u.ufv)}</strong><span class="muted">${ind.f.replace('GL',refTxt)}</span>
+      <strong>${esc(sig)} · ${esc(u.ufv)}</strong><span class="muted">${ind.f.replace(B,refTxt)}</span>
       <div class="gd-det-stats">
         <span>Média ${gdN()}m <b style="color:${gdColor(media)}">${media!=null?media.toLocaleString('pt-BR')+'%':'—'}</b></span>
         <span>Melhor <b>${melhor?ymLabel(melhor.mes)+' '+melhor.v.toLocaleString('pt-BR')+'%':'—'}</b></span>
@@ -1975,13 +2007,13 @@ function gdAbrir(id,key,sig){
         <span>Abaixo de 95% <b>${abaixo} de ${validos.length}</b></span>
         ${GD_DIF[key]?`<span>Diferença no período <b style="color:${gdColor(media)}">${fmtMWh(gdSomaDif(pts.map(p=>p.d).filter(Boolean),key,ind.max))}</b></span>`:''}
       </div></div>
-    <div class="gd-chart">${gdGrafico(pts,media,{max:ind.max,dif:GD_DIF[key]})}</div>
+    <div class="gd-chart">${gdGrafico(pts,media,{max:ind.max,dif:GD_DIF[key],baseNome:B})}</div>
     <div class="gd-det-leg">
       <span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="#639922" stroke-width="1.5" stroke-dasharray="4 3"/></svg>Meta 95%</span>
       ${media!=null?`<span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.5 3"/></svg>Média ${gdN()}m ${media.toLocaleString('pt-BR')}%</span>`:''}
       ${pts.some(p=>p.v!=null&&!(p.v>0&&p.v<ind.max))?'<span><svg width="12" height="10" aria-hidden="true"><rect x="1" y="1" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2 1.5"/></svg>Fora da média (zero, negativo ou acima do limite)</span>':''}
       ${pts.some(p=>p.v==null)?'<span>— sem dado no mês</span>':''}
-      ${GD_DIF[key]?`<span>Números abaixo dos meses: diferença em MWh (${key==='ij_gl'?'IJ − GL':'(CP + ΔSaldo) − GL'})</span>`:''}
+      ${GD_DIF[key]?`<span>Números abaixo dos meses: diferença em MWh (${{ij_gl:'IJ − GL',cp_ds_ij:'(CP + ΔSaldo) − IJ'}[key]||'(CP + ΔSaldo) − GL'})</span>`:''}
     </div>${key==='cp_gl'?gdBlocoConsumo(meses,por):''}`;
   row.after(det);
 }
@@ -2039,7 +2071,7 @@ function gdGrafico(pts,media,o={}){
     const fora=!(p.v>0&&p.v<max),cor=corDe(p.v);
     const y0=y(0),y1=y(p.v),top=Math.min(y0,y1),alt=Math.max(1.5,Math.abs(y1-y0));
     const cortado=p.v>yMax||p.v<yMin;
-    const dica=`${ymLabel(p.mes)}: ${p.v.toLocaleString('pt-BR')}%${o.dif&&p.d&&p.d[o.dif]!=null?' · '+fmtMWh(p.d[o.dif]):''}${p.d&&o.base!==false?' · base '+(p.d.gc?'GL do mês':'GL(m-1)'):''}${fora?' · fora da média':''}`;
+    const dica=`${ymLabel(p.mes)}: ${p.v.toLocaleString('pt-BR')}%${o.dif&&p.d&&p.d[o.dif]!=null?' · '+fmtMWh(p.d[o.dif]):''}${p.d&&o.base!==false?' · base '+(p.d.gc?`${o.baseNome||'GL'} do mês`:`${o.baseNome||'GL'}(m-1)`):''}${fora?' · fora da média':''}`;
     g+=`<g><title>${dica}</title><rect x="${x}" y="${top}" width="${barW}" height="${alt}" rx="3" fill="${cor}" ${fora?`fill-opacity=".25" stroke="${cor}" stroke-dasharray="3 2"`:''}/>`;
     const ly=p.v>=0?top-5:top+alt+11;
     const tY=Math.max(11,Math.min(H-B-2,ly)),tTxt=`${cortado?(p.v>0?'▲ ':'▼ '):''}${p.v.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`;
@@ -2069,7 +2101,7 @@ function gdCritico(id,key,max,cols,vazio){
 }
 const f1=v=>v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
 const pct=v=>v!=null?f1(v)+'%':'—';
-const GD_DIF={cp_ds_gl:'dif_ds',ij_gl:'dif_ij'};
+const GD_DIF={cp_ds_gl:'dif_ds',cp_ds_ij:'dif_dsij',ij_gl:'dif_ij'};
 const fmtMWh=(v,unid=true)=>v==null?'—':(v>0.05?'+':v<-0.05?'−':'')+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+(unid?' MWh':'');
 // Soma da diferença nos meses que entram na média do indicador (mesmo filtro do %)
 const gdSomaDif=(lst,key,max=300)=>{const dk=GD_DIF[key];const v=(lst||[]).filter(d=>d[key]!=null&&d[key]>0&&d[key]<max&&d[dk]!=null);
@@ -2081,13 +2113,14 @@ function painelBuild(){
   // Modalidade vigente no mês escolhido (a FIT, por exemplo, muda em jul/26)
   const mods=painelUsinas().map(u=>u.vig?u.vig.gc:null).filter(v=>v!=null);
   if(!mods.length)mods.push(isGC(GD[gdCli].mod));
-  const glTxt=mods.every(v=>v)?'GL do mês':mods.every(v=>!v)?'GL(m-1)':'GL de referência';
-  document.querySelectorAll('.gd-sub[data-f]').forEach(e=>e.textContent=e.dataset.f.replace('{GL}',glTxt)+(glTxt==='GL de referência'?' — GL do mês na Geração Compartilhada, GL(m-1) no Autoconsumo Remoto':''));
+  const refDe=B=>mods.every(v=>v)?`${B} do mês`:mods.every(v=>!v)?`${B}(m-1)`:`${B} de referência`;
+  document.querySelectorAll('.gd-sub[data-f]').forEach(e=>{const B=e.dataset.f.includes('{IJ}')?'IJ':'GL',r=refDe(B);
+    e.textContent=e.dataset.f.replace(`{${B}}`,r)+(r.endsWith('referência')?` — ${B} do mês na Geração Compartilhada, ${B}(m-1) no Autoconsumo Remoto`:'')});
   document.getElementById('gdBadge').innerHTML=mods.length?`<span class="badge ${mods.every(v=>v)?'bi':'bn'}">${mods.every(v=>v)?'Geração Compartilhada':mods.every(v=>!v)?'Autoconsumo Remoto':'Modalidades mistas'}</span>`:'';
   document.querySelectorAll('.gd-hdr-vig').forEach(e=>e.textContent=`Mês final (${ymLabel(gdMes)})`);
   document.querySelectorAll('.gd-hdr-12').forEach(e=>e.textContent=`Média ${gdN()}m (${gdPerTxt()})`);
   document.querySelectorAll('.gd-per').forEach(e=>e.textContent=gdN()===1?ymLabel(gdMes):`${gdN()} meses (${gdPerTxt()})`);
-  gdRows('gdRows1','cp_gl');gdRows('gdRows2','cp_ds_gl');gdRows('gdRows3','ij_gl');
+  gdRows('gdRows1','cp_gl');gdRows('gdRows2','cp_ds_gl');gdRows('gdRows4','cp_ds_ij');gdRows('gdRows3','ij_gl');
   const sec='var(--text2)';
   gdCritico('gdCrit2','cp_ds_gl',500,[
     ['CP+ΔS/GL',d=>[pct(d.cp_ds_gl),gdColor(d.cp_ds_gl)],true],
@@ -2096,6 +2129,12 @@ function painelBuild(){
     ['IJ/GL',d=>[pct(d.ij_gl),gdColor(d.ij_gl)]],
     ['Diferença',d=>[fmtMWh(d.dif_ds),gdColor(d.cp_ds_gl)],true]],
     'Nenhuma usina com reconhecimento total médio abaixo de 95% no período.');
+  gdCritico('gdCrit4','cp_ds_ij',500,[
+    ['CP+ΔS/IJ',d=>[pct(d.cp_ds_ij),gdColor(d.cp_ds_ij)],true],
+    ['CP+ΔS/GL',d=>[pct(d.cp_ds_gl),gdColor(d.cp_ds_gl)]],
+    ['IJ/GL',d=>[pct(d.ij_gl),gdColor(d.ij_gl)]],
+    ['Diferença',d=>[fmtMWh(d.dif_dsij),gdColor(d.cp_ds_ij)],true]],
+    'Nenhuma usina com reconhecimento total sobre a injetada abaixo de 95% no período.');
   gdCritico('gdCrit3','ij_gl',300,[
     ['IJ/GL',d=>[pct(d.ij_gl),gdColor(d.ij_gl)],true],
     ['CP/GL',d=>[pct(d.cp_gl),sec]],
@@ -2108,7 +2147,7 @@ function painelBuild(){
 //  ABAS + AVISOS
 // ═════════════════════════════════════════════════════════════════════
 function goTab(t){
-  if(!['validador','painel','base'].includes(t))t='validador';
+  if(!['validador','painel','relatorios','base'].includes(t))t='validador';
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t?'true':'false'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='tab-'+t);
   try{if(location.hash!=='#'+t)history.replaceState(null,'','#'+t)}catch(e){/* pré-visualização em iframe: sem hash */}
@@ -2207,7 +2246,7 @@ const fmtGWh=v=>fmtN(v/1000,2)+' GWh';
 function relGerarPptx(PptxGenJS,R,LOGOS){
   const pres=new PptxGenJS();
   pres.layout='LAYOUT_WIDE'; // 13,33" × 7,5", igual ao modelo
-  pres.author='Portal GD SUN';pres.title=`Gestão de Energia — ref. ${relLbl(R.ref)}`;
+  pres.author='Portal GD SUN';pres.title=`RCA Mensal — ref. ${relLbl(R.ref)}`;
   const F='Arial',FC='Calibri'; // modelo: títulos e conceitos em Arial, demais textos em Calibri
   const img=(k,x,y,w,h)=>LOGOS[k]?{image:{x,y,w,h,data:LOGOS[k].data}}:null;
   pres.defineSlideMaster({title:'GD',background:{color:'FFFFFF'},
@@ -2433,13 +2472,16 @@ function relCarregarLib(){
     s.onload=()=>window.PptxGenJS?res(window.PptxGenJS):rej(new Error('biblioteca não carregou'));
     s.onerror=()=>{_relLib=null;rej(new Error('sem acesso ao CDN da biblioteca'))};document.head.appendChild(s)}));
 }
-function relAbrir(){
-  const p=document.getElementById('relPanel'),b=document.getElementById('relBtn');
-  const abrir=p.hidden;p.hidden=!abrir;b.setAttribute('aria-expanded',String(abrir));
-  if(!abrir)return;
-  const sel=document.getElementById('relRef');
+// Monta a lista de meses de referência (chamada sempre que a base carrega ou muda)
+function relPreparar(){
+  const sel=document.getElementById('relRef'),bt=document.getElementById('relGerar');if(!sel)return;
+  const atual=sel.value;
+  if(!GD_MESES.length){sel.innerHTML='<option value="">—</option>';bt.disabled=true;
+    document.getElementById('relResumo').textContent='Carregue a base Controle_GdE na aba Base de dados para gerar os relatórios.';return}
+  bt.disabled=false;
   sel.innerHTML=GD_MESES.map((m,i)=>`<option value="${m}">${ymLabel(m)}${i===0?' (último)':''}</option>`).join('');
-  relResumo();sel.onchange=relResumo;
+  if(GD_MESES.includes(atual))sel.value=atual;
+  sel.onchange=relResumo;relResumo();
 }
 function relResumo(){
   const ref=document.getElementById('relRef').value;if(!ref||!window._PARSE)return;
@@ -2460,7 +2502,7 @@ async function relExportar(opts={}){
     const Lib=await relCarregarLib();
     const R=relCalcular(window._PARSE.recs,ref);
     const pres=relGerarPptx(Lib,R,REL_LOGOS);
-    const hoje=new Date(),nome=`${hoje.getFullYear()}_${String(hoje.getMonth()+1).padStart(2,'0')}_GdE_ref_${ref.replace('-','_')}.pptx`;
+    const hoje=new Date(),nome=`${hoje.getFullYear()}_${String(hoje.getMonth()+1).padStart(2,'0')}_RCA_Mensal_ref_${ref.replace('-','_')}.pptx`;
     if(!window.JSZip){await pres.writeFile({fileName:nome})} // sem JSZip: baixa sem o ajuste de parágrafos
     else{
       const fin=await relFinalizar(await pres.write({outputType:'arraybuffer'}),window.JSZip);
