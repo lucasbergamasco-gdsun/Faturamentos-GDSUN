@@ -243,6 +243,7 @@ header{gap:1rem}
     <button class="cbtn" onclick="selectClient('tim',this)">TIM</button>
     <button class="cbtn" onclick="selectClient('igua',this)">Iguá</button>
     <button class="cbtn" onclick="selectClient('dpsp',this)">DPSP</button>
+<button class="cbtn" onclick="selectClient('claro',this)">Claro</button>
   </div>
   <div class="upload-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
@@ -455,7 +456,10 @@ function guessUFV(fileName){
                  .replace(/\s*\([^)]*\)/g,' ') // remover parênteses e conteúdo ex: "(SANESSOL)" → ""
                  .trim().replace(/\s+/g,' '); // normalizar espaços múltiplos
   const keys=Object.keys(IJ_DB).map(k=>k.split('|')[0]);
-  const unique=[...new Set(keys)];
+  const todas=[...new Set(keys)];
+  // Usinas do cliente selecionado (GL_DB: UFV|Cliente|mês); se não houver, considera todas
+  const doCliente=(()=>{const c=_nrm(clienteLabel());return [...new Set(Object.keys(GL_DB).filter(k=>_nrm(k.split('|')[1])===c).map(k=>k.split('|')[0]))]})();
+  const unique=doCliente.length?doCliente:todas;
   // Normaliza: minúsculo, remove acentos, remove não-alfanuméricos
   const n=s=>s.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -486,13 +490,18 @@ function guessUFV(fileName){
   if(exact) return exact;
   // 2. Prefixo: nome do arquivo é prefixo do banco ou vice-versa (mín 6 chars)
   // Em caso de múltiplos matches (ex: "São Mateus I" e "São Mateus II"), retorna o mais curto
-  const prefixMatches=unique.filter(u=>nm.length>=6&&(n(u).startsWith(nm)||nm.startsWith(n(u))));
-  if(prefixMatches.length) return prefixMatches.sort((a,b)=>a.length-b.length)[0];
+  // Preferência: nome da base que começa com o nome do arquivo ("Varzea da Palma II" → "Varzea da Palma II (Andromeda)",
+  // e não "Varzea da Palma I", que é só prefixo do nome do arquivo)
+  const estende=unique.filter(u=>nm.length>=6&&n(u).startsWith(nm));
+  if(estende.length) return estende.sort((a,b)=>a.length-b.length)[0];
+  const prefixMatches=unique.filter(u=>nm.length>=6&&nm.startsWith(n(u)));
+  if(prefixMatches.length) return prefixMatches.sort((a,b)=>b.length-a.length)[0];
   // 3. Prefixo de 8 chars
   const p8=unique.find(u=>nm.length>=8&&(n(u).slice(0,8)===nm.slice(0,8)));
   if(p8) return p8;
   // 4. Palavras com mais de 3 chars
   return unique.find(u=>{const w=nm.replace(/\d+/g,'').match(/[a-z]{4,}/g)||[];return w.some(x=>n(u).includes(x)&&x!=='fatu'&&x!=='amen')})
+      ||(doCliente.length&&unique!==todas?todas.find(u=>n(u)===nm||(nm.length>=6&&n(u).startsWith(nm))):null)
       ||null;
 }
 
@@ -504,6 +513,7 @@ function clienteLabel(){
   if(currentClient==='tim') return 'TIM';
   if(currentClient==='igua') return 'Iguá';
   if(currentClient==='dpsp') return 'DPSP';
+  if(currentClient==='claro') return 'Claro';
   return 'Raia Drogasil';
 }
 
@@ -555,7 +565,9 @@ function handleFile(file){
 let lastAnalysis=null;
 function runAnalysis(wb,fileName){
         // Detectar modelo automaticamente pelas abas do arquivo
-        const hasCalcOM=wb.SheetNames.some(n=>n.toLowerCase().includes('o&m')||n.toLowerCase().includes('lculo'));
+        // Claro: abas "geradora" + "beneficiarias1..N" (tem também "cálculo bandeira", por isso vem antes da Magalu)
+        const hasClaro=(wb.SheetNames.some(n=>n.toLowerCase()==='geradora')&&wb.SheetNames.some(n=>/^benefici/i.test(n)))||/claro/i.test(fileName);
+        const hasCalcOM=!hasClaro&&wb.SheetNames.some(n=>n.toLowerCase().includes('o&m')||n.toLowerCase().includes('lculo'));
         const hasUFV=wb.SheetNames.some(n=>/^UFV\d+$/.test(n)||n==='Medição'||n==='Medicao');
         const hasRelatorio=wb.SheetNames.some(n=>n.toLowerCase().includes('relat')&&wb.SheetNames.length<=2);
         // Iguá: nome do arquivo contém 'Igua' ou 'Iguá', OU linha 8 da aba Medição tem 'Pot. Inst.'
@@ -572,16 +584,20 @@ function runAnalysis(wb,fileName){
         const hasIgua=hasIguaFileName||hasIguaContent;
         const hasDpsp=fileNameLower.includes('dpsp')||wb.SheetNames.some(n=>n.toLowerCase().includes('planilhamedicao'));
         // Iguá e DPSP verificados ANTES de hasUFV pois também têm aba tipo 'Medição'
-        const clienteDetectado=hasCalcOM?'magalu':hasDpsp?'dpsp':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
+        const clienteDetectado=hasClaro?'claro':hasCalcOM?'magalu':hasDpsp?'dpsp':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
         if(clienteDetectado!==currentClient){
           console.warn('Modelo detectado automaticamente: '+clienteDetectado+' (selecionado: '+currentClient+')');
+          // usa o cliente detectado (identificação da UFV e GL do banco dependem dele) e marca o botão
+          const b=[...document.querySelectorAll('.cbtn')].find(x=>(x.getAttribute('onclick')||'').includes(`'${clienteDetectado}'`));
+          if(b)selectClient(clienteDetectado,b);else currentClient=clienteDetectado;
         }
         if(clienteDetectado==='magalu') analyzeMagalu(wb,fileName);
         else if(clienteDetectado==='raia') analyzeRaia(wb,fileName);
         else if(clienteDetectado==='tim') analyzeTim(wb,fileName);
         else if(clienteDetectado==='igua') analyzeIgua(wb,fileName);
         else if(clienteDetectado==='dpsp') analyzeDpsp(wb,fileName);
-        else showError('Modelo não identificado. Verifique se o arquivo é um modelo Magalu, Raia Drogasil, TIM ou Iguá.');
+        else if(clienteDetectado==='claro') analyzeClaro(wb,fileName);
+        else showError('Modelo não identificado. Verifique se o arquivo é um modelo Magalu, Raia Drogasil, TIM, Iguá, DPSP ou Claro.');
 }
 
 // ── UTILITÁRIOS ──────────────────────────────────────────────────────
@@ -912,6 +928,83 @@ function analyzeDpsp(wb,fileName){
   renderResults(allUCs,fileName,guessUFV(fileName),detectedMes,ugSummary,ipcaLabels,{semLista:true});
 }
 
+// ── PARSER CLARO ─────────────────────────────────────────────────────
+// Abas: "geradora" (uma linha por UG) e "beneficiarias1..N" (UCs de cada UG, na mesma ordem).
+// Regras da Claro:
+//  • Sem fatura no mês, a Claro reaproveita faturas de até 3 meses anteriores ("Mês de Referência" da UC
+//    anterior ao do arquivo). Essas UCs saem da análise energética para não gerar falsos positivos.
+//  • A energia da UG na medição já vem deslocada: é sempre tratada como M-1 da compensação,
+//    independentemente do mês informado na aba geradora.
+function analyzeClaro(wb,fileName){
+  const mes=mesFromFileName(fileName);
+  const ufv=guessUFV(fileName);
+  const ymDe=v=>{if(v==null||v==='')return null;
+    if(v instanceof Date&&!isNaN(v)){const y=v.getFullYear(),m=v.getMonth()+1;return y>=2000?`${y}-${String(m).padStart(2,'0')}`:null}
+    const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{2})/);if(m)return +m[1]>=2000?`${m[1]}-${m[2]}`:null;
+    m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return +y>=2000?`${y}-${String(m[1].length<=2&&+m[2]<=12?m[2]:m[1]).padStart(2,'0')}`:null}
+    return null};
+  const rows=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true});
+  const col=(h,...t)=>h.findIndex(x=>t.every(k=>String(x).toLowerCase().includes(k)));
+  // Geradoras
+  const gName=wb.SheetNames.find(n=>n.toLowerCase()==='geradora');
+  const gRows=gName?rows(gName):[];const gh=gRows[0]||[];
+  const gc={nome:col(gh,'nome'),ug:col(gh,'unidade geradora'),mes:col(gh,'refer'),ijP:col(gh,'injetada','ponta'),ijFP:col(gh,'injetada','fora'),icms:col(gh,'icms'),
+    credAnt:col(gh,'créditos provenientes'),credP:col(gh,'crédito ponta'),credFP:col(gh,'crédito fora')};
+  if(gc.ijFP>=0&&gc.ijP===gc.ijFP)gc.ijP=gh.findIndex((x,i)=>i!==gc.ijFP&&/injetada ponta/i.test(String(x)));
+  const geradoras=gRows.slice(1).filter(r=>String(r[gc.nome]||'').trim()).map(r=>({
+    nome:String(r[gc.nome]).trim(),uc:String(r[gc.ug]||'').trim(),mesRot:ymDe(r[gc.mes]),
+    injecao:pf(r[gc.ijFP])+(gc.ijP>=0?pf(r[gc.ijP]):0),icms:gc.icms>=0?pf(r[gc.icms]):null,
+    credAnt:gc.credAnt>=0?pf(r[gc.credAnt]):0,credSeg:(gc.credP>=0?pf(r[gc.credP]):0)+(gc.credFP>=0?pf(r[gc.credFP]):0)}));
+  const mesUG=mes?prevMonth(mes):null; // energia da UG sempre M-1 da compensação
+  const ugSummary=geradoras.map(g=>({ug:g.nome,injecao:g.injecao,saldoUG:0,mes:mesUG}));
+  // Beneficiárias (beneficiarias1 ↔ 1ª geradora, …)
+  const bens=wb.SheetNames.filter(n=>/^benefici/i.test(n)).sort((a,b)=>(+a.replace(/\D/g,'')||0)-(+b.replace(/\D/g,'')||0));
+  if(!bens.length){showError('Abas de beneficiárias não encontradas. Verifique o modelo Claro.');return}
+  const allUCs=[],antigas={};
+  bens.forEach((bn,k)=>{
+    const R=rows(bn),h=R[0]||[];
+    const c={nro:0,uc:col(h,'unidade consumidora'),pct:col(h,'rateio'),saldoAnt:col(h,'provenientes'),consumo:col(h,'consumo'),
+      comp:col(h,'compensada'),saldo:col(h,'seguinte'),mes:col(h,'refer'),taxMin:col(h,'taxa m')};
+    const ugNome=(geradoras[k]&&geradoras[k].nome)||bn;
+    for(let i=1;i<R.length;i++){
+      const r=R[i];const nro=String(r[c.nro]).trim(),uc=String(r[c.uc]??'').trim();
+      if(!uc||!/^\d+$/.test(nro))continue; // linhas de total ("medição", "Total") e vazias
+      const vazio=r[c.consumo]===''||r[c.consumo]==null;
+      const mRef=ymDe(r[c.mes]);
+      const consumo=pf(r[c.consumo]),taxMin=c.taxMin>=0?pf(r[c.taxMin]):0;
+      const antiga=!vazio&&mRef&&mes&&mRef<mes;
+      const u={uc,ug:ugNome,pct:pf(r[c.pct]),consumo,compensada:pf(r[c.comp]),saldo:pf(r[c.saldo]),saldoAnt:c.saldoAnt>=0?pf(r[c.saldoAnt]):0,
+        icms:null,pis:null,cofins:null, // a medição da Claro não traz impostos por UC
+        hasData:!vazio&&!antiga&&!!mRef&&consumo>0,mesFatura:mRef,faturaAntiga:!!antiga,
+        taxMin:taxMin>0?taxMin:100,issues:[]};
+      if(antiga){
+        antigas[mRef]=(antigas[mRef]||0)+1;
+        u.issues.push({type:'info',rule:0,msg:`Fatura de ${mRef} reaproveitada pela Claro (sem fatura em ${mes}). Retirada da análise energética para não gerar falso positivo — a compensação de ${Math.round(u.compensada).toLocaleString('pt-BR')} kWh é de outro mês. O rateio da UC entra como potencial compensável.`});
+      }
+      allUCs.push(u);
+    }
+  });
+  if(!allUCs.length){showError('Nenhuma UC encontrada. Verifique o modelo Claro.');return}
+  // Variação de saldo pela própria medição (a base mistura saldo com e sem o crédito da UG entre os meses):
+  // UCs com fatura do mês (crédito p/ mês seguinte − créditos provenientes) + UG (crédito seguinte − proveniente)
+  const dUCs=allUCs.filter(u=>u.hasData).reduce((s,u)=>s+(u.saldo-u.saldoAnt),0);
+  const dUG=geradoras.reduce((s,g)=>s+(g.credSeg-g.credAnt),0);
+  const varSaldoMedicao=dUCs+dUG;
+  // Avisos do modelo
+  const avisos=[];
+  const nAnt=Object.values(antigas).reduce((s,v)=>s+v,0);
+  if(nAnt){
+    const comp=allUCs.filter(u=>u.faturaAntiga).reduce((s,u)=>s+u.compensada,0);
+    avisos.push({id:'claro_antigas',tipo:'info',titulo:'Faturas de meses anteriores retiradas da análise',
+      msg:`${nAnt} UC(s) estão com fatura de mês anterior reaproveitada pela Claro (${Object.entries(antigas).sort().map(([m,n])=>`${n} de ${m}`).join(', ')}). A compensação dessas UCs (${Math.round(comp).toLocaleString('pt-BR')} kWh) não entra nas regras; o rateio delas é tratado como potencial, como nas linhas sem dados.`,detalhe:null,extras:null});
+  }
+  const difRot=geradoras.filter(g=>g.mesRot&&mesUG&&g.mesRot!==mesUG);
+  if(difRot.length)avisos.push({id:'claro_mes_ug',tipo:'info',titulo:'Mês da geradora diferente de M-1',
+    msg:`A aba geradora informa ${[...new Set(difRot.map(g=>g.mesRot))].join(', ')} para ${difRot.map(g=>g.nome).join(', ')}, mas pela regra da Claro a energia da UG é sempre a do mês anterior à compensação (${mesUG}). A comparação usa ${mesUG}.`,detalhe:null,extras:null});
+  renderResults(allUCs,fileName,ufv,mes,ugSummary,[],{ijDeslocada:true,rateioPorUG:true,avisos,
+    varSaldoMedicao,varSaldoNota:`via medição: UCs ${Math.round(dUCs).toLocaleString('pt-BR')} + UG ${Math.round(dUG).toLocaleString('pt-BR')} kWh`});
+}
+
 // ── PARSER IGUÁ ──────────────────────────────────────────────────────
 function analyzeIgua(wb,fileName){
   // Estrutura idêntica ao Raia (aba Medição, UG linha 12-13, UCs a partir linha 16)
@@ -1151,7 +1244,7 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
       if(u.cofins===0) u.issues.push({type:'danger',rule:3,msg:'COFINS zerado na fatura.'});
       if(u.icms===0)   u.issues.push({type:'danger',rule:3,msg:'ICMS zerado na fatura.'});
     }
-    if(!u.hasData&&u.pct>0)
+    if(!u.hasData&&u.pct>0&&!u.faturaAntiga)
       u.issues.push({type:'info',rule:0,msg:'Dados de consumo ausentes (linha vazia). Não é erro — considerado no cálculo de potencial.'});
   });
 
@@ -1189,24 +1282,31 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
     const saldoFonteAt=saldoUCsKwh>0?'medição':'banco';
     // Pirangi IB Sanessol: saldo M-1 do banco inclui ESAP — comparação inválida, zerar varSaldo
     const saldoIncomparavel=isPirangiIBSanessol&&saldoM1Kwh!=null;
-    const varSaldo=saldoIncomparavel?0:(saldoM1Kwh!=null?saldoAtEfetivo-saldoM1Kwh:0);
-    const pctVazia=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct,0);
+    const varSaldo=opts.varSaldoMedicao!=null?opts.varSaldoMedicao:saldoIncomparavel?0:(saldoM1Kwh!=null?saldoAtEfetivo-saldoM1Kwh:0);
+    let pctVazia=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct,0);
     // Potencial de linhas vazias: usa IJ real do mês anterior (IJ_REAL_DB[ufv|mesM1])
     // Para concessionárias com defasagem (Equatorial GO), a IJ da medição já é M-1,
     // então usamos a IJ da própria medição para evitar duplo deslocamento.
-    const ufvTemDefasagem=ufv&&UFV_IJ_DEFASAGEM.some(u=>ufv.includes(u)||u.includes(ufv));
+    const ufvTemDefasagem=opts.ijDeslocada||(ufv&&UFV_IJ_DEFASAGEM.some(u=>ufv.includes(u)||u.includes(ufv)));
     const ijRealM1=ufv&&mesM1?IJ_REAL_DB[`${ufv}|${mesM1}`]:null;
     const ijParaPotVazio=ufvTemDefasagem
       ?(ugSummary&&ugSummary.length>0?ugSummary.reduce((s,u)=>s+u.injecao,0):ijM1_kwh)
       :(ijRealM1!=null?ijRealM1*1000:ijM1_kwh);
-    const potVazio=pctVazia*ijParaPotVazio;
+    let potVazio=pctVazia*ijParaPotVazio;
+    // Rateio por UG (Claro: cada aba de beneficiárias soma 100% da sua UG): potencial calculado UG a UG
+    if(opts.rateioPorUG&&ugSummary&&ugSummary.length){
+      const ijUG={};ugSummary.forEach(g=>ijUG[g.ug]=(ijUG[g.ug]||0)+g.injecao);
+      const ijTot=Object.values(ijUG).reduce((s,v)=>s+v,0);
+      potVazio=ucs.filter(u=>!u.hasData).reduce((s,u)=>s+u.pct*(ijUG[u.ug]||0),0);
+      pctVazia=ijTot>0?potVazio/ijTot:0; // participação equivalente na injeção total (para exibição)
+    }
     const totalExp=compTotal+varSaldo+potVazio;
     const desvio=ijM1_kwh>0?Math.abs(totalExp-ijM1_kwh)/ijM1_kwh:0;
     const sinal=totalExp>=ijM1_kwh?'acima':'abaixo';
     const dp=`${sinal==='acima'?'+':'−'}${(desvio*100).toFixed(1)}%`;
     const nUGs=ugSummary?ugSummary.length:1;
     const ugNota=nUGs>1?` (consolidado de ${nUGs} UGs)`:'';
-    const saldoNota=saldoIncomparavel?'não considerado (banco inclui ESAP)':`via ${saldoFonteAt}`;
+    const saldoNota=opts.varSaldoNota||(saldoIncomparavel?'não considerado (banco inclui ESAP)':`via ${saldoFonteAt}`);
     const det=`GL M-1${ugNota}: ${Math.round(ijM1_kwh).toLocaleString('pt-BR')} kWh · Compensação total: ${Math.round(compTotal).toLocaleString('pt-BR')} kWh · Variação saldo (${saldoNota}): ${Math.round(varSaldo).toLocaleString('pt-BR')} kWh · Potencial linhas vazias (${(pctVazia*100).toFixed(1)}%): ${Math.round(potVazio).toLocaleString('pt-BR')} kWh · Total explicado: ${Math.round(totalExp).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
     const tipo=desvio<=0.05?'ok':desvio<=0.10?'warn':'danger';
     const dirMsg=sinal==='acima'
@@ -1256,7 +1356,7 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
     // Pirangi IB Sanessol: saldo banco inclui ESAP — usar saldoAnt das próprias UCs
     const saldoAntUCsKwh=ucs.reduce((s,u)=>s+(u.saldoAnt||0),0);
     const saldoTotalAnt=isPirangiIBSanessol?(saldoAntUCsKwh>0?saldoAntUCsKwh:null):(saldoDbM1!=null?saldoDbM1*1000:null);
-    const varSaldoR6=saldoTotalAnt!=null?saldoTotalMes-saldoTotalAnt:null;
+    const varSaldoR6=opts.varSaldoMedicao!=null?opts.varSaldoMedicao:saldoTotalAnt!=null?saldoTotalMes-saldoTotalAnt:null;
     // Melhoria potencial = quanto do crédito acumulado poderia cobrir o déficit
     const melhoriaKwh=Math.min(creditoAcum,deficit);
     const compTotal=comDados.reduce((s,u)=>s+u.compensada,0);
@@ -1266,7 +1366,7 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
     const melhoriaPorc=(ijDisponivelR6>0?melhoriaKwh/ijDisponivelR6:0);
     // Saldo crescendo = acúmulo contínuo → reforça revisão; diminuindo = lista consumindo créditos
     const saldoCresce=varSaldoR6!=null&&varSaldoR6>0;
-    const temSaldoAnt=saldoTotalAnt!=null;
+    const temSaldoAnt=saldoTotalAnt!=null||opts.varSaldoMedicao!=null;
     let r6tipo='ok',r6msg='',r6det='';
     if(comSaldo.length>0&&subComp.length>0){
       const varSaldoStr=temSaldoAnt?(varSaldoR6>0
@@ -1371,6 +1471,7 @@ function renderResults(ucs,fileName,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
     statusChecks.push({id:'status',tipo:'info',titulo:'UG Replicada (REP_UG)',
       msg:'Este arquivo está marcado como <strong>REP_UG</strong>: os dados de injeção da Unidade Geradora são referentes a meses anteriores. A Regra 7 (IJ vs GL) pode não refletir o mês atual.',detalhe:null,extras:null});
   }
+  if(opts.avisos&&opts.avisos.length)statusChecks.push(...opts.avisos);
   if(!BASE_META.loaded){
     statusChecks.unshift({id:'base',tipo:'warn',titulo:'Base Controle_GdE não carregada',
       msg:'As regras que dependem do banco (GL M-1, saldo e IJ real) ficaram sem referência. Conecte a base na aba <strong>Base de dados</strong> e a análise é refeita automaticamente.',detalhe:null,extras:null});
@@ -1445,15 +1546,15 @@ function renderTable(ucs){
     const bg=t==='danger'?'var(--red-bg)':t==='warn'?'var(--amber-bg)':t==='info'?'var(--blue-bg)':'';
     const col=t==='danger'?'var(--red)':t==='warn'?'var(--amber)':t==='info'?'var(--blue)':'var(--green)';
     return `<tr style="background:${bg}">
-      <td><span style="font-family:var(--mono);font-size:11px">${u.uc}</span>${!u.hasData?'<span style="font-size:10px;color:var(--text2);margin-left:4px">(sem dados)</span>':''}</td>
+      <td><span style="font-family:var(--mono);font-size:11px">${u.uc}</span>${u.faturaAntiga?`<span style="font-size:10px;color:var(--text2);margin-left:4px">(fatura ${u.mesFatura})</span>`:!u.hasData?'<span style="font-size:10px;color:var(--text2);margin-left:4px">(sem dados)</span>':''}</td>
       <td><span class="ug-tag">${u.ug}</span></td>
       <td>${(u.pct*100).toFixed(2)}%</td>
       <td>${u.hasData?Math.round(u.consumo).toLocaleString('pt-BR'):'—'}</td>
       <td>${u.compensada>0?Math.round(u.compensada).toLocaleString('pt-BR'):'—'}</td>
       <td>${u.saldo>0?`<span style="color:var(--amber);font-weight:500">${Math.round(u.saldo).toLocaleString('pt-BR')}</span>`:'—'}</td>
-      <td>${!u.hasData||u.pis>0?chk:fal}</td>
-      <td>${!u.hasData||u.cofins>0?chk:fal}</td>
-      <td>${!u.hasData||u.icms>0?chk:fal}</td>
+      <td>${u.pis==null?'—':!u.hasData||u.pis>0?chk:fal}</td>
+      <td>${u.cofins==null?'—':!u.hasData||u.cofins>0?chk:fal}</td>
+      <td>${u.icms==null?'—':!u.hasData||u.icms>0?chk:fal}</td>
       <td><span style="color:${col};font-size:12px">${u.issues.length===0?'Nenhuma':u.issues.length+' ocorrência'+(u.issues.length>1?'s':'')}</span></td>
     </tr>`;
   }).join('');
