@@ -223,7 +223,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge">v3.0</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.2 · 21/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -412,7 +412,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.0 · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.2 (21/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -1580,6 +1580,8 @@ function applyFilter(type,btn){
 // ═════════════════════════════════════════════════════════════════════
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
+// Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
+const PORTAL_VERSAO='v3.2 · 21/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -1920,7 +1922,7 @@ function renderStatus(){
   }
   if(SRC.erro)dot='danger';
   pill.innerHTML=`<span class="pill-dot ${dot}"></span>${esc(txt)}`;
-  document.getElementById('vbadge').textContent=`v3.0${BASE_META.ultimoCP?' · CP '+ymLabel(BASE_META.ultimoCP):''}`;
+  document.getElementById('vbadge').textContent=`${PORTAL_VERSAO}${BASE_META.ultimoCP?' · CP '+ymLabel(BASE_META.ultimoCP):''}`;
   let b='';
   if(SRC.handle&&SRC.perm!=='granted'){
     b=`<i class="ti ti-refresh-alert"></i><span>${BASE_META.loaded?`Mostrando a cópia de ${fmtData(SRC.cacheDe||SRC.loadedAt)}. `:''}O navegador pede sua confirmação para ler o Controle_GdE no G:.</span><button class="btn btn-primary" onclick="sincronizarLocal()"><i class="ti ti-plug-connected"></i> Sincronizar com o G:</button>`;
