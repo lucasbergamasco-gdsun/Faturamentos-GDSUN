@@ -2406,17 +2406,28 @@ function relCalcular(recs,ref){
   const clientes={};recs.forEach(r=>{if(r.cliente&&r.mes<=relAdd(ref,1))(clientes[r.cliente]??=[]).push(r)});
   function indicador(rs,regra,refC){
     const campo=regra==='GC'?'ij':'cp';
-    // Mês efetivo: último mês até a referência com o dado lançado (CP no Autoconsumo, IJ na Ger. Compartilhada)
-    const comDado=rs.filter(r=>r.mes<=refC&&(r[campo]||0)>0).map(r=>r.mes).sort();
-    if(!comDado.length)return null;
-    const ef=comDado[comDado.length-1];
-    const limGL=regra==='GC'?ef:relAdd(ef,-1);
-    const den=sum(rs.filter(r=>r.mes<=limGL),'gl');
-    const ecomp=sum(rs.filter(r=>r.mes<=ef),campo);
-    const saldo=regra==='GC'?0:sum(rs.filter(r=>r.mes===ef),'saldo');
-    if(!(den>0))return null;
+    // Mês efetivo POR UFV: cada usina entra até o último mês com o dado lançado (CP no Autoconsumo,
+    // IJ na Ger. Compartilhada). Assim, usinas ainda não lançadas no mês não puxam saldo/compensação para zero.
+    const porUFV={};rs.forEach(r=>(porUFV[r.ufv]??=[]).push(r));
+    let den=0,ecomp=0,saldo=0,ef=null;const efs=[];
+    for(const lst of Object.values(porUFV)){
+      const comDado=lst.filter(r=>r.mes<=refC&&(r[campo]||0)>0).map(r=>r.mes).sort();
+      if(!comDado.length)continue;
+      const e=comDado[comDado.length-1];if(!ef||e>ef)ef=e;
+      // a usina continua no cliente no mês de referência? (ex.: São Borja I/II saíram da Telefônica para a FIT em jul/26)
+      const noCliente=lst.some(r=>r.mes>=refC);
+      if(noCliente)efs.push(e);
+      const limGL=regra==='GC'?e:relAdd(e,-1);
+      // GL e compensação: todo o histórico em que a usina foi do cliente
+      den+=sum(lst.filter(r=>r.mes<=limGL),'gl');
+      ecomp+=sum(lst.filter(r=>r.mes<=e),campo);
+      // saldo é estoque: só das usinas que ainda pertencem ao cliente
+      if(regra!=='GC'&&noCliente)saldo+=sum(lst.filter(r=>r.mes===e),'saldo');
+    }
+    if(!ef||!(den>0))return null;
     const pE=ecomp/den,pS=saldo/den,pN=Math.max(0,1-pE-pS);
-    return {ef,den,ecomp,saldo,snr:pN*den,pE,pS,pN};
+    const atras=efs.filter(e=>e<ef),efMin=atras.length?[...atras].sort()[0]:null;
+    return {ef,den,ecomp,saldo,snr:pN*den,pE,pS,pN,nUFV:efs.length,nAtras:atras.length,efMin};
   }
   const lista=Object.entries(clientes).map(([nome,rs])=>{
     const ult=rs.filter(r=>r.mod&&r.mes<=ref).sort((a,b)=>a.mes<b.mes?1:-1)[0];
@@ -2548,7 +2559,7 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     const gap=18;
     s.addChart(pres.charts.BAR,[
       {name:'Geração Líquida',labels:cols.map(c=>relLbl(c.mes)),values:cols.map(c=>c.gl)},
-      {name:'Geração Compensada',labels:cols.map(c=>relLbl(c.mes)),values:cols.map(c=>c.proximo?0:c.cp)},
+      {name:'Geração Compensada',labels:cols.map(c=>relLbl(c.mes)),values:cols.map(c=>c.cp)},
     ],{...CH,barDir:'col',barGrouping:'clustered',barGapWidthPct:gap,chartColors:[RC.verde,RC.azulCP],
       valAxisHidden:true,valAxisMinVal:0,valAxisMaxVal:vMax,valGridLine:{style:'none'},catAxisHidden:true,
       catGridLine:{style:'none'},showLegend:false,layout:lay,objectName:'Gráfico mensal'});
@@ -2560,7 +2571,17 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     cols.forEach((c,i)=>{
       const cx=PX+cw*(i+0.5),xg=cx-bw/2,xc=cx+bw/2;
       if(c.gl>0)vert(fmtN(c.gl),xg,Math.max(yv(c.gl)+0.62,BASE-0.62));
-      if(!c.proximo&&c.cp>0)vert(fmtN(c.cp),xc,Math.max(yv(c.cp)+0.62,BASE-0.62));
+      // mês prévio com pouca compensação lançada: barra baixa → valor acima dela, em cinza-escuro
+      const cpBaixo=c.proximo&&c.cp>0&&(BASE-yv(c.cp))<0.85;
+      if(c.cp>0)cpBaixo?vert(fmtN(c.cp),xc,yv(c.cp)-0.4,{color:'404040'}):vert(fmtN(c.cp),xc,Math.max(yv(c.cp)+0.62,BASE-0.62));
+      // mês prévio (após a referência): % só informativo, logo acima da barra de compensação (0% fica rente à base, como no modelo)
+      if(c.proximo){
+        // alinhado à coluna da compensação, para não cobrir o valor da GL
+        const pv=c.gl>0?(c.cp||0)/c.gl:0;
+        const y=!(c.cp>0)?BASE-0.08:cpBaixo?yv(c.cp)-0.9:Math.min(yp(pv),yv(c.cp)-0.14);
+        s.addShape(pres.shapes.DIAMOND,{x:xc-0.06,y:y-0.06,w:0.12,h:0.12,fill:{color:RC.amarelo},line:{color:RC.amarelo,width:0.5}});
+        tx(s,fmtP(pv),{x:xc-0.45,y:y-0.34,w:0.9,h:0.26,align:'center',fontSize:14,bold:true,color:'404040'});
+      }
       if(!c.proximo&&c.pct!=null){
         const y=yp(c.pct);
         s.addShape(pres.shapes.DIAMOND,{x:cx-0.06,y:y-0.06,w:0.12,h:0.12,fill:{color:RC.amarelo},line:{color:RC.amarelo,width:0.5}});
@@ -2571,7 +2592,9 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       tx(s,c.comCP===tot?[{text:String(tot),options:{color:RC.azul}}]
         :[{text:String(c.comCP).padStart(2,'0'),options:{color:RC.laranjaTx}},{text:'/'+tot,options:{color:RC.azul}}],
         {x:cx-0.4,y:BASE+0.27,w:0.8,h:0.22,align:'center',fontSize:10,bold:true});
-      if(c.proximo)s.addShape(pres.shapes.RECTANGLE,{x:PX+cw*i+0.03,y:PY-0.18,w:cw-0.06,h:PH+0.72,fill:{type:'none'},line:{color:'A6A6A6',width:1.5,dashType:'dash'}});
+      if(c.proximo){
+        s.addShape(pres.shapes.RECTANGLE,{x:PX+cw*i+0.03,y:PY-0.18,w:cw-0.06,h:PH+0.72,fill:{type:'none'},line:{color:'A6A6A6',width:1.5,dashType:'dash'}});
+      }
     });
     tx(s,'Ativos',{x:0.19,y:BASE+0.27,w:0.6,h:0.22,fontSize:10,bold:true,color:RC.azul});
 
@@ -2708,6 +2731,7 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       const ww=L.ww||Math.min(1.0,0.3*L.w/L.h),hh=L.hh||ww*L.h/L.w,top=L.top??0.08;
       s.addImage({data:L.data,x:x0+CW/2-ww/2,y:y0+top,w:ww,h:hh,altText:c.nome})}
     else tx(s,c.nome,{x:x0,y:y0+0.06,w:CW,h:0.32,align:'center',valign:'middle',fontSize:16,bold:true,color:RC.azul});
+    if(!c.semDado&&c.nAtras)tx(s,`${c.nAtras} de ${c.nUFV} usinas até ${relLbl(c.efMin)}`,{x:x0+CW-1.55,y:y0+0.06,w:1.47,h:0.2,align:'right',fontSize:9,italic:true,color:RC.cinzaTx});
     if(c.semDado)tx(s,`acumulado até ${relLbl(c.ef)}`,{x:x0+CW-1.25,y:y0+0.06,w:1.17,h:0.2,align:'right',fontSize:9,italic:true,color:RC.cinzaTx});
     const temSaldo=c.regra==='ACR';
     const cats=['GL','SNR',...(temSaldo?['SALDO']:[]),'ECOMP'];
