@@ -2406,30 +2406,21 @@ function relCalcular(recs,ref){
 
   // Slides por cliente: acumulado desde o COD
   const clientes={};recs.forEach(r=>{if(r.cliente&&r.mes<=relAdd(ref,1))(clientes[r.cliente]??=[]).push(r)});
+  // Acumulado desde o COD — mesma lógica da aba RCA do Controle_GdE, sem descartar meses:
+  //   não reconhecido = GL − (CP + Saldo). Compensação não lançada conta como energia não reconhecida.
+  //   GL até o mês anterior (Autoconsumo Remoto e Flora) ou até o próprio mês (Ger. Compartilhada);
+  //   CP até o mês de referência; saldo do mês de referência (só usinas do cliente nesse mês).
   function indicador(rs,regra,refC){
-    const campo=regra==='GC'?'ij':'cp';
-    // Mês efetivo POR UFV: cada usina entra até o último mês com o dado lançado (CP no Autoconsumo,
-    // IJ na Ger. Compartilhada). Assim, usinas ainda não lançadas no mês não puxam saldo/compensação para zero.
-    const porUFV={};rs.forEach(r=>(porUFV[r.ufv]??=[]).push(r));
-    let den=0,ecomp=0,saldo=0,ef=null;const efs=[];
-    for(const lst of Object.values(porUFV)){
-      const comDado=lst.filter(r=>r.mes<=refC&&(r[campo]||0)>0).map(r=>r.mes).sort();
-      if(!comDado.length)continue;
-      const e=comDado[comDado.length-1];if(!ef||e>ef)ef=e;
-      // a usina continua no cliente no mês de referência? (ex.: São Borja I/II saíram da Telefônica para a FIT em jul/26)
-      const noCliente=lst.some(r=>r.mes>=refC);
-      if(noCliente)efs.push(e);
-      const limGL=regra==='GC'?e:relAdd(e,-1);
-      // GL e compensação: todo o histórico em que a usina foi do cliente
-      den+=sum(lst.filter(r=>r.mes<=limGL),'gl');
-      ecomp+=sum(lst.filter(r=>r.mes<=e),campo);
-      // saldo é estoque: só das usinas que ainda pertencem ao cliente
-      if(regra!=='GC'&&noCliente)saldo+=sum(lst.filter(r=>r.mes===e),'saldo');
-    }
-    if(!ef||!(den>0))return null;
+    const limGL=regra==='GC'?refC:relAdd(refC,-1);
+    const den=sum(rs.filter(r=>r.mes<=limGL),'gl');
+    const ecomp=sum(rs.filter(r=>r.mes<=refC),'cp');
+    const saldo=sum(rs.filter(r=>r.mes===refC),'saldo');
+    if(!(den>0)||!rs.some(r=>r.mes<=refC&&(r.cp||0)>0))return null;
     const pE=ecomp/den,pS=saldo/den,pN=Math.max(0,1-pE-pS);
-    const atras=efs.filter(e=>e<ef),efMin=atras.length?[...atras].sort()[0]:null;
-    return {ef,den,ecomp,saldo,snr:pN*den,pE,pS,pN,nUFV:efs.length,nAtras:atras.length,efMin};
+    // usinas do cliente no mês de referência ainda sem compensação lançada (só informativo)
+    const noMes=rs.filter(r=>r.mes===refC);
+    const semCP=new Set(noMes.filter(r=>!((r.cp||0)>0)).map(r=>r.ufv)).size;
+    return {ef:refC,den,ecomp,saldo,snr:pN*den,pE,pS,pN,nUFV:new Set(noMes.map(r=>r.ufv)).size,nSemCP:semCP};
   }
   const lista=Object.entries(clientes).map(([nome,rs])=>{
     const ult=rs.filter(r=>r.mod&&r.mes<=ref).sort((a,b)=>a.mes<b.mes?1:-1)[0];
@@ -2439,8 +2430,9 @@ function relCalcular(recs,ref){
     const atual=indicador(rs,regra,ref);
     if(!atual)return null;
     const ant=indicador(rs,regra,relAdd(ref,-1));
-    const vr=ant&&ant.ef<atual.ef?{pE:atual.pE-ant.pE,pS:atual.pS-ant.pS,pN:atual.pN-ant.pN}:null;
-    return {nome,slide,regra,...atual,semDado:atual.ef<ref,var:vr};
+    const vr=ant?{pE:atual.pE-ant.pE,pS:atual.pS-ant.pS,pN:atual.pN-ant.pN}:null;
+    // cliente inteiro sem compensação no mês: nota de rodapé "não disponibilizados", como no modelo
+    return {nome,slide,regra,...atual,semDado:atual.nUFV>0&&atual.nSemCP===atual.nUFV,var:vr};
   }).filter(Boolean);
   const ordena=(grupo)=>{const ord=REL_CFG.ordem[grupo]||[];
     return lista.filter(c=>c.slide===grupo).sort((a,b)=>{const ia=ord.indexOf(a.nome),ib=ord.indexOf(b.nome);
@@ -2733,8 +2725,8 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       const ww=L.ww||Math.min(1.0,0.3*L.w/L.h),hh=L.hh||ww*L.h/L.w,top=L.top??0.08;
       s.addImage({data:L.data,x:x0+CW/2-ww/2,y:y0+top,w:ww,h:hh,altText:c.nome})}
     else tx(s,c.nome,{x:x0,y:y0+0.06,w:CW,h:0.32,align:'center',valign:'middle',fontSize:16,bold:true,color:RC.azul});
-    if(!c.semDado&&c.nAtras)tx(s,`${c.nAtras} de ${c.nUFV} usinas até ${relLbl(c.efMin)}`,{x:x0+CW-1.55,y:y0+0.06,w:1.47,h:0.2,align:'right',fontSize:9,italic:true,color:RC.cinzaTx});
-    if(c.semDado)tx(s,`acumulado até ${relLbl(c.ef)}`,{x:x0+CW-1.25,y:y0+0.06,w:1.17,h:0.2,align:'right',fontSize:9,italic:true,color:RC.cinzaTx});
+    // informativo: usinas sem compensação lançada no mês (entram como não reconhecido)
+    if(c.nSemCP&&!c.semDado)tx(s,`${c.nSemCP} de ${c.nUFV} usinas sem CP`,{x:x0+CW-1.75,y:y0+0.06,w:1.67,h:0.2,align:'right',fontSize:9,italic:true,color:RC.cinzaTx});
     const temSaldo=c.regra==='ACR';
     const cats=['GL','SNR',...(temSaldo?['SALDO']:[]),'ECOMP'];
     const nomes={GL:'',SNR:'Saldo Não Reconhecido vs. GL',SALDO:'Saldo vs. GL',ECOMP:'ECOMP vs. GL'};
@@ -2878,10 +2870,10 @@ function relResumo(){
   const ref=document.getElementById('relRef').value;if(!ref||!window._PARSE)return;
   try{const R=relCalcular(window._PARSE.recs,ref);
     const nS=2+Math.ceil(R.ACR.length/REL_CFG.porSlide)+Math.ceil(R.GC.length/REL_CFG.porSlide);
-    const sem=[...R.ACR,...R.GC].filter(c=>c.semDado).map(c=>`${c.nome} (até ${ymLabel(c.ef)})`);
+    const sem=[...R.ACR,...R.GC].filter(c=>c.nSemCP).map(c=>`${c.nome} (${c.nSemCP} de ${c.nUFV})`);
     const pct=R.acum12.pct!=null?(R.acum12.pct*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':'—';
     document.getElementById('relResumo').innerHTML=`${nS} slides · ${R.ACR.length} clientes em Autoconsumo Remoto, ${R.GC.length} em Geração Compartilhada · competência ${ymLabel(R.acum12.ini)} a ${ymLabel(R.acum12.fim)}: ${pct}`+
-      (sem.length?`<br>Sem dados em ${ymLabel(ref)}: ${esc(sem.join(', '))} — o acumulado vai até o último mês lançado e o slide traz a nota.`:'');
+      (sem.length?`<br>Usinas sem compensação lançada em ${ymLabel(ref)}: ${esc(sem.join(', '))} — entram como energia não reconhecida.`:'');
   }catch(e){console.error(e)}
 }
 async function relExportar(opts={}){
