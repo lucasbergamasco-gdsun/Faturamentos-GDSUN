@@ -333,7 +333,7 @@ header{gap:1rem}
         <div id="gdRows1"></div>
       </section>
       <section class="gd-panel">
-        <h3>Reconhecimento total</h3><p class="gd-sub" data-f="(CP + ΔSaldo + Consumo UG) / {GL}"></p><p class="gd-sub gd-sub-mwh">Na barra, <span class="gd-leg-ug"></span>consumo da própria UG segregado (não é compensação nem perda). Ao lado do %, a perda em MWh: (CP + ΔSaldo + Consumo UG) − GL. Negativo é energia não reconhecida; no período, soma dos meses que entram na média.</p>
+        <h3>Reconhecimento total</h3><p class="gd-sub" data-f="(CP + ΔSaldo + Consumo UG) / {GL}"></p><p class="gd-sub gd-sub-mwh">Na barra, <span class="gd-leg-ug"></span>consumo da própria UG segregado (não é compensação nem perda). Ao lado do %, a perda em MWh: (CP + ΔSaldo + Consumo UG) − GL. Negativo é energia não reconhecida; no período, soma de todos os meses com valor lançado (mês ainda sem lançamento fica de fora).</p>
         <div class="gd-head"><div>Usina</div><div class="gd-hdr-vig"></div><div class="gd-hdr-12"></div></div>
         <div id="gdRows2"></div>
       </section>
@@ -342,7 +342,7 @@ header{gap:1rem}
         <div id="gdCrit2"></div>
       </section>
       <section class="gd-panel">
-        <h3>Reconhecimento total sobre a injetada</h3><p class="gd-sub" data-f="(CP + ΔSaldo + Consumo UG) / {IJ}"></p><p class="gd-sub gd-sub-mwh">Na barra, <span class="gd-leg-ug"></span>consumo da própria UG segregado. Ao lado do %, a perda em MWh: (CP + ΔSaldo + Consumo UG) − IJ. Negativo é energia injetada que não foi reconhecida; no período, soma dos meses que entram na média.</p>
+        <h3>Reconhecimento total sobre a injetada</h3><p class="gd-sub" data-f="(CP + ΔSaldo + Consumo UG) / {IJ}"></p><p class="gd-sub gd-sub-mwh">Na barra, <span class="gd-leg-ug"></span>consumo da própria UG segregado. Ao lado do %, a perda em MWh: (CP + ΔSaldo + Consumo UG) − IJ. Negativo é energia injetada que não foi reconhecida; no período, soma de todos os meses com valor lançado (mês ainda sem lançamento fica de fora).</p>
         <div class="gd-head"><div>Usina</div><div class="gd-hdr-vig"></div><div class="gd-hdr-12"></div></div>
         <div id="gdRows4"></div>
       </section>
@@ -351,7 +351,7 @@ header{gap:1rem}
         <div id="gdCrit4"></div>
       </section>
       <section class="gd-panel">
-        <h3>Reconhecimento pela concessionária</h3><p class="gd-sub">IJ / GL</p><p class="gd-sub gd-sub-mwh">Ao lado do %, a diferença em MWh: IJ − GL. Negativo é geração não injetada; no período, soma dos meses que entram na média.</p>
+        <h3>Reconhecimento pela concessionária</h3><p class="gd-sub">IJ / GL</p><p class="gd-sub gd-sub-mwh">Ao lado do %, a diferença em MWh: IJ − GL. Negativo é geração não injetada; no período, soma de todos os meses com valor lançado (mês ainda sem lançamento fica de fora).</p>
         <div class="gd-head"><div>Usina</div><div class="gd-hdr-vig"></div><div class="gd-hdr-12"></div></div>
         <div id="gdRows3"></div>
       </section>
@@ -2055,10 +2055,10 @@ const GD_UG={cp_ds_gl:'ug_gl',cp_ds_ij:'ug_ij'};
 const GD_UG_COR='#8B7FD1';
 // Parcela da UG no período (Σ consumo UG ÷ Σ referência), nos meses que entram na média do indicador
 const gdAvgUG=(lst,key,max=300)=>{const dk=GD_ND[key][1];let n=0,d=0;
-  (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&v>0&&v<max&&x[dk]>0){n+=x._ug||0;d+=x[dk]}});return d>0?Math.round(n/d*1000)/10:null};
-const gdSomaUG=(lst,key,max=300)=>{let s=0,ok=false;(lst||[]).forEach(x=>{const v=x[key];if(v!=null&&v>0&&v<max){s+=x._ug||0;ok=true}});return ok?s:null};
+  (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&x[dk]>0){n+=x._ug||0;d+=x[dk]}});return d>0?Math.round(n/d*1000)/10:null};
+const gdSomaUG=(lst,key,max=300)=>{let s=0,ok=false;(lst||[]).forEach(x=>{const v=x[key];if(v!=null){s+=x._ug||0;ok=true}});return ok?s:null};
 const gdAvg=(lst,key,max=300)=>{const[nk,dk]=GD_ND[key];let n=0,d=0;
-  (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&v>0&&v<max&&x[nk]!=null&&x[dk]>0){n+=x[nk];d+=x[dk]}});
+  (lst||[]).forEach(x=>{const v=x[key];if(v!=null&&x[nk]!=null&&x[dk]>0){n+=x[nk];d+=x[dk]}});
   return d>0?Math.round(n/d*1000)/10:null};
 let gdCli=null,gdMes=null,gdIni=null,gdSpan=11; // gdSpan = meses entre o inicial e o final (11 → 12 meses)
 const ymDiff=(a,b)=>{const[y1,m1]=a.split('-').map(Number),[y2,m2]=b.split('-').map(Number);return (y2-y1)*12+(m2-m1)};
@@ -2178,7 +2178,7 @@ function gdAbrir(id,key,sig){
   const por={};u.serie.forEach(d=>por[d.mes]=d);
   const pts=meses.map(m=>({mes:m,d:por[m]||null,v:por[m]?por[m][key]:null}));
   const ind=GD_IND[key];
-  const validos=pts.filter(p=>p.v!=null&&p.v>0&&p.v<ind.max);
+  const validos=pts.filter(p=>p.v!=null);
   const media=gdAvg(pts.map(p=>p.d).filter(Boolean),key,ind.max);
   const pior=validos.length?validos.reduce((a,b)=>b.v<a.v?b:a):null;
   const melhor=validos.length?validos.reduce((a,b)=>b.v>a.v?b:a):null;
@@ -2202,7 +2202,7 @@ function gdAbrir(id,key,sig){
     <div class="gd-det-leg">
       <span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="#639922" stroke-width="1.5" stroke-dasharray="4 3"/></svg>Meta 95%</span>
       ${media!=null?`<span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.5 3"/></svg>Média ${gdN()}m ${media.toLocaleString('pt-BR')}%</span>`:''}
-      ${pts.some(p=>p.v!=null&&!(p.v>0&&p.v<ind.max))?'<span><svg width="12" height="10" aria-hidden="true"><rect x="1" y="1" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2 1.5"/></svg>Fora da média (zero, negativo ou acima do limite)</span>':''}
+      ${false?'<span><svg width="12" height="10" aria-hidden="true"><rect x="1" y="1" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-dasharray="2 1.5"/></svg>Fora da média (zero, negativo ou acima do limite)</span>':''}
       ${pts.some(p=>p.v==null)?'<span>— sem dado no mês</span>':''}
       ${GD_UG[key]?'<span><span class="gd-leg-ug"></span>Consumo UG (topo da barra)</span>':''}
       ${GD_DIF[key]?`<span>Números abaixo dos meses: ${GD_UG[key]?'perda':'diferença'} em MWh (${{ij_gl:'IJ − GL',cp_ds_ij:'(CP + ΔSaldo + Consumo UG) − IJ',cp_ds_gl:'(CP + ΔSaldo + Consumo UG) − GL'}[key]})</span>`:''}
@@ -2215,11 +2215,11 @@ function gdBlocoConsumo(meses,por){
   const acr=m=>por[m]&&!por[m].gc;
   if(!meses.some(acr))return '';
   const pts=meses.map(m=>({mes:m,d:acr(m)?por[m]:null,v:acr(m)?por[m].cp_cons:null}));
-  const val=pts.filter(p=>p.v!=null&&p.v>0&&p.v<300);
+  const val=pts.filter(p=>p.v!=null);
   const media=gdAvg(pts.map(p=>p.d).filter(Boolean),'cp_cons',300);
   const cheios=val.filter(p=>p.v>=99.5).length;
   const menor=val.length?val.reduce((a,b)=>b.v<a.v?b:a):null;
-  const fora=pts.some(p=>p.v!=null&&!(p.v>0&&p.v<300));
+  const fora=false;
   return `<div class="gd-det-hdr gd-det-sep">
       <strong>Compensação / consumo</strong><span class="muted">CP / Consumo das UCs</span>
       <div class="gd-det-stats">
@@ -2260,7 +2260,7 @@ function gdGrafico(pts,media,o={}){
     if(o.dif&&p.d&&p.d[o.dif]!=null)g+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="9.5" font-weight="500" fill="${corDe(p.v)}">${fmtMWh(p.d[o.dif],false)}</text>`;
     if(p.v==null){g+=`<text x="${cx}" y="${y(0)-5}" text-anchor="middle" font-size="10" fill="var(--text2)">—</text>`;return}
     if(Object.is(p.v,-0))p.v=0;
-    const fora=!(p.v>0&&p.v<max),cor=corDe(p.v);
+    const fora=false,cor=corDe(p.v); // todo mês com valor lançado conta (perda real)
     const y0=y(0),y1=y(p.v),top=Math.min(y0,y1),alt=Math.max(1.5,Math.abs(y1-y0));
     const cortado=p.v>yMax||p.v<yMin;
     const dica=`${ymLabel(p.mes)}: ${p.v.toLocaleString('pt-BR')}%${o.dif&&p.d&&p.d[o.dif]!=null?' · '+fmtMWh(p.d[o.dif]):''}${p.d&&o.base!==false?' · base '+(p.d.gc?`${o.baseNome||'GL'} do mês`:`${o.baseNome||'GL'}(m-1)`):''}${fora?' · fora da média':''}`;
@@ -2282,7 +2282,7 @@ function gdCritico(id,key,max,cols,vazio){
     const media=gdAvg(u.u12,key,max);
     if(media==null||media>=95)return;
     crit.push({...u,media,
-      meses:u.u12.filter(d=>d[key]!=null&&d[key]>0&&d[key]<max).sort((a,b)=>a[key]-b[key]).slice(0,3)});
+      meses:u.u12.filter(d=>d[key]!=null).sort((a,b)=>a[key]-b[key]).slice(0,3)});
   });
   crit.sort((a,b)=>a.media-b.media);
   const el=document.getElementById(id);
@@ -2299,7 +2299,7 @@ const pct=v=>v!=null?f1(v)+'%':'—';
 const GD_DIF={cp_ds_gl:'dif_ds',cp_ds_ij:'dif_dsij',ij_gl:'dif_ij'};
 const fmtMWh=(v,unid=true)=>v==null?'—':(v>0.05?'+':v<-0.05?'−':'')+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+(unid?' MWh':'');
 // Soma da diferença nos meses que entram na média do indicador (mesmo filtro do %)
-const gdSomaDif=(lst,key,max=300)=>{const dk=GD_DIF[key];const v=(lst||[]).filter(d=>d[key]!=null&&d[key]>0&&d[key]<max&&d[dk]!=null);
+const gdSomaDif=(lst,key,max=300)=>{const dk=GD_DIF[key];const v=(lst||[]).filter(d=>d[key]!=null&&d[dk]!=null);
   return v.length?v.reduce((s,d)=>s+d[dk],0):null};
 function painelBuild(){
   gdCli=document.getElementById('gdCliente').value;
