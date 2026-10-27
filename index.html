@@ -223,7 +223,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.2 · 21/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.3 · 27/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -395,6 +395,23 @@ header{gap:1rem}
           <div id="comEditor"></div>
         </details>
       </section>
+      <section class="rel-card rel-largo">
+        <div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-presentation"></i></span>
+          <div><strong>Apresentação ao cliente</strong><span class="muted"> · PowerPoint</span></div></div>
+        <p class="muted">Capa, conceitos, análise de compensação e geração do cliente (mês de referência e últimos 12 meses), acumulado desde o COD e ações GdE em andamento — só com os dados do cliente escolhido. Clientes de Geração Compartilhada seguem a regra do Comitê (energia injetada sobre a GL do mês).</p>
+        <div class="src-actions">
+          <label class="muted" style="display:flex;align-items:center;gap:8px">Cliente <select id="apCli" class="map-sel" style="width:auto" onchange="apCarregarTexto()"></select></label>
+          <label class="muted" style="display:flex;align-items:center;gap:8px">Mês de referência <select id="apRef" class="map-sel" style="width:auto"></select></label>
+          <button class="btn btn-primary" id="apGerar" onclick="apExportar()"><i class="ti ti-download"></i> Gerar PowerPoint</button>
+          <span class="muted" id="apStatus" role="status"></span>
+        </div>
+        <details class="com-det">
+          <summary>Ações GdE em andamento</summary>
+          <p class="hint">Um item por linha: <code># Título</code> abre um grupo (➢), <code>- item</code> vira marcador (em negrito quando tem subitens), <code>-- subitem</code> vira submarcador, linha sem marcação vira parágrafo e linha começando com <code>¹</code> vai para a nota de rodapé. Textos longos são divididos em mais de um slide. O texto fica salvo neste navegador, por cliente.
+            <button class="btn btn-ghost" onclick="apRestaurar()" style="padding:2px 8px"><i class="ti ti-rotate"></i> Restaurar texto do modelo</button></p>
+          <textarea id="apTexto" class="com-tx" rows="14" style="width:100%" oninput="apSalvarTexto()" aria-label="Ações GdE em andamento"></textarea>
+        </details>
+      </section>
       <section class="rel-card rel-novo" aria-label="Novos modelos">
         <i class="ti ti-file-plus" style="font-size:22px"></i>
         <p>Novos modelos de relatório aparecerão aqui.</p>
@@ -412,7 +429,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.2 (21/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.3 (27/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -1581,7 +1598,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.2 · 21/10/26';
+const PORTAL_VERSAO='v3.3 · 27/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -2459,11 +2476,13 @@ function relAnalise(recs,ref){
     const usinas=Object.entries(c.usinas).map(([rot,u])=>{
       const a=u.m[ref]||{},p=u.m[relAdd(ref,-1)]||{};
       let e=null,cs=null,e12=null,c12=null;
-      if(regra==='GC'){e=v(a.gl)>0&&a.ij!=null?a.ij/a.gl:null;
-        const n=meses.reduce((s,m)=>s+v((u.m[m]||{}).ij),0),d=meses.reduce((s,m)=>s+v((u.m[m]||{}).gl),0);e12=d>0&&n>0?n/d:null}
-      else{e=v(p.gl)>0&&a.cp!=null?a.cp/p.gl:null;cs=v(a.consumo)>0&&a.cp!=null?a.cp/a.consumo:null;
+      // Mesma conta das tabelas da aba RCA do Controle_GdE: compensação (CP) sobre a GL;
+      // compensação não lançada conta como zero (energia não reconhecida), desde que haja geração/consumo.
+      if(regra==='GC'){e=v(a.gl)>0&&u.m[ref]?v(a.cp)/a.gl:null;
+        const n=meses.reduce((s,m)=>s+v((u.m[m]||{}).cp),0),d=meses.reduce((s,m)=>s+v((u.m[m]||{}).gl),0);e12=d>0?n/d:null}
+      else{e=v(p.gl)>0&&u.m[ref]?v(a.cp)/p.gl:null;cs=v(a.consumo)>0?v(a.cp)/a.consumo:null;
         const n=meses.reduce((s,m)=>s+v((u.m[m]||{}).cp),0),d=meses.reduce((s,m)=>s+v((u.m[relAdd(m,-1)]||{}).gl),0),k=meses.reduce((s,m)=>s+v((u.m[m]||{}).consumo),0);
-        e12=d>0&&n>0?n/d:null;c12=k>0&&n>0?n/k:null}
+        e12=d>0?n/d:null;c12=k>0?n/k:null}
       if(u.m[ref])out.ativos[slide].add(u.ufv);
       return {rot,ufv:u.ufv,e,c:cs,e12,c12};
     }).filter(u=>u.e!=null||u.e12!=null).sort((a,b)=>a.rot.localeCompare(b.rot,'pt-BR'));
@@ -2502,8 +2521,8 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     ].filter(Boolean),
     slideNumber:{x:12.43,y:7.15,w:0.4,h:0.2,fontFace:F,fontSize:10,color:'000000',align:'right'}});
   // ── Capa do Comitê (layout do modelo: foto de fundo, título, logo GDSUN e faixa com Franklin/Servtec) ──
-  if(O.comite){
-    const I=O.comite.img;
+  if(O.comite||O.apres){
+    const I=(O.comite||O.apres).img;
     pres.defineSlideMaster({title:'CAPA',background:{data:I.fundo.data},objects:[
       {image:{x:9.64,y:2.76,w:2.28,h:1.61,data:I.gdsun.data}},
       {rect:{x:0,y:6.23,w:13.333,h:1.27,fill:{color:'FFFFFF'},line:{type:'none'}}},
@@ -2513,13 +2532,34 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       {line:{x:6.66,y:6.56,w:0,h:0.73,line:{color:'595959',width:0.75}}},
     ]});
     const c=pres.addSlide({masterName:'CAPA'});
-    c.addText(O.comite.titulo||'Gestão de Energia',{x:1.17,y:1.42,w:7.87,h:3.12,fontFace:'Calibri Light',fontSize:44,color:'FFFFFF',valign:'bottom',margin:0,isTextBox:true});
+    if(O.apres)c.addText([{text:'Gestão de Energia',options:{fontSize:44,breakLine:true}},{text:`Ativos ${O.apres.cliente}`,options:{fontSize:36}}],
+      {x:1.17,y:1.42,w:7.87,h:3.12,fontFace:'Calibri Light',color:'FFFFFF',valign:'bottom',margin:0,isTextBox:true});
+    else c.addText(O.comite.titulo||'Gestão de Energia',{x:1.17,y:1.42,w:7.87,h:3.12,fontFace:'Calibri Light',fontSize:44,color:'FFFFFF',valign:'bottom',margin:0,isTextBox:true});
   }
   const novo=(t,tam)=>{const s=pres.addSlide({masterName:'GD'});s.addText(t,{placeholder:'titulo',...(tam?{fontSize:tam}:{})});return s};
   const tx=(s,t,o)=>s.addText(t,{isTextBox:true,fontFace:FC,margin:0,...o});
 
   // ── Slide 1: Conceitos ──
-  {
+  if(O.apres){
+    const s=novo('Conceitos');
+    const H=t=>({text:t,options:{bold:true,fontSize:18,color:RC.azul,breakLine:true,paraSpaceBefore:10,paraSpaceAfter:4}});
+    const B=(b,r)=>[{text:b,options:{bold:true,bullet:{indent:14},indentLevel:1}},{text:r,options:{breakLine:true}}];
+    tx(s,[
+      H('Lista de Siglas'),
+      ...B('P90',' – Energia prevista em MWh através de certificação de empresa especialista, indica a probabilidade de produção de energia para o ativo.'),
+      ...B('GL – Geração Líquida',' – Geração de energia em MWh registrada no supervisório da UFV para o período.'),
+      ...B('ECOMP – Energia Compensada',' – Energia identificada em MWh nas faturas da beneficiária (cliente final).'),
+      ...B('CONS – Consumo',' – Consumo das beneficiárias em MWh no período.'),
+      ...B('CMC – Consumo Mínimo Contratual',' – Consumo mínimo indicado em contrato de PPA.'),
+      ...B('Saldo Não Reconhecido',' – Diferença entre energia gerada e energia reconhecida (Compensada + Saldo)'),
+      H('Indicadores'),
+      ...B('%P90 = P90/GL',' – Relação entre GL e P90 indicando o atingimento da certificação em %.'),
+      ...B('%ECOMP = [ECOMP]/GL(M-1)',' – Relação entre a Energia Compensada no período e a Geração Líquida um mês defasada da ECOMP, devido a procedimento da concessionária, indicando a relação em %. Para Geração Compartilhada é considerada a Energia Injetada na fatura da DisCo sem o deslocamento.'),
+      ...B('%CONS = ECOMP/CONS',' – Relação entre a compensação de energia e o consumo das beneficiárias em %.'),
+      ...B('%CMC = CONS/CMC',' – Relação entre o consumo do cliente no período e o valor mínimo contratual em %.'),
+    ],{x:0.5,y:1.33,w:12.33,h:5.42,fontSize:12,fontFace:F,color:RC.azul,valign:'top',align:'justify',paraSpaceAfter:3});
+  }
+  else {
     const s=novo('Conceitos');
     const H=t=>({text:t,options:{bold:true,fontSize:18,color:RC.azul,breakLine:true,paraSpaceBefore:10,paraSpaceAfter:4}});
     const B=(b,r)=>[{text:b,options:{bold:true,bullet:{indent:14},indentLevel:1}},{text:r,options:{breakLine:true}}];
@@ -2541,7 +2581,7 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
   }
 
   // ── Slide 2: Avaliação por competência ──
-  {
+  if(!O.apres){
     const s=novo('Gestão de Energia – Avaliação por Competência',24);
     const cols=[...R.mensal,...(R.prox?[{...R.prox,proximo:true}]:[])];
     const n=cols.length;
@@ -2628,6 +2668,27 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       {x:0.5,y:6.82,w:9,h:0.2,fontSize:8,color:RC.cinzaTx,italic:true});
   }
 
+  // Gráfico de linhas por usina (%ECOMP e %CONS), do mês de referência ou dos últimos 12 meses
+  function grafico(s,c,x,y,w,h,doze){
+    const gc=c.slide==='GC',lab=c.usinas.map(u=>u.rot); // no slide de Ger. Compartilhada só %ECOMP (inclusive Flora)
+    const E=c.usinas.map(u=>doze?u.e12:u.e),K=c.usinas.map(u=>doze?u.c12:u.c);
+    const dados=[{name:'%ECOMP',labels:lab,values:E}];if(!gc)dados.push({name:'%CONS',labels:lab,values:K});
+    const vals=[...E,...(gc?[]:K)].filter(v=>v!=null);
+    const vMax=Math.max(1.6,Math.ceil(Math.max(0,...vals)*1.3*10)/10);
+    const apertado=w/lab.length<0.42;
+    s.addChart(pres.charts.LINE,dados,{x,y,w,h,chartColors:['2E75B6','ED7D31'],lineSize:2,lineDataSymbol:'triangle',lineDataSymbolSize:5,lineSmooth:true,
+      showValue:true,dataLabelFormatCode:'0%',dataLabelPosition:'t',dataLabelFontSize:6,dataLabelFontBold:true,dataLabelColor:'2E75B6',dataLabelFontFace:'Calibri',
+      catAxisLabelFontSize:8,catAxisLabelColor:'595959',catAxisLabelFontFace:'Calibri',catAxisLabelRotate:apertado?-45:0,catAxisLineShow:true,catAxisLineColor:'D9D9D9',
+      valAxisHidden:true,valAxisMinVal:0,valAxisMaxVal:vMax,valGridLine:{style:'none'},catGridLine:{style:'none'},showLegend:false,
+      chartArea:{fill:{color:'FFFFFF'},border:{color:'D9D9D9',pt:0.75}},
+      layout:{x:0.04,y:0.2,w:0.92,h:apertado?0.58:0.64},objectName:`Análise ${c.nome} ${doze?'12 meses':'mês'}`});
+    const L=LOGOS[c.nome];
+    // tamanho de exibição calibrado por logo (o mesmo do RCA Mensal, que compensa as margens de cada imagem)
+    if(L){const mw=Math.min(w*0.45,1.15),mh=0.3;let ww=L.ww||0.2*L.w/L.h,hh=L.hh||0.2;
+      const k=Math.min(1,mw/ww,mh/hh);ww*=k;hh*=k;
+      s.addImage({data:L.data,x:x+w/2-ww/2,y:y+0.08+(mh-hh)/2,w:ww,h:hh,altText:c.nome})}
+    else tx(s,c.nome,{x,y:y+0.06,w,h:0.3,align:'center',valign:'middle',fontSize:13,bold:true,color:RC.azul});
+  }
   // ── Comitê: análise de compensação/geração por usina, com "Principais pontos" ──
   if(O.comite)relSlidesAnalise(O.comite);
   function relSlidesAnalise(C){
@@ -2668,26 +2729,6 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
           {x:0.41,y:7.29,w:11.3,h:0.18,fontSize:8,bold:true,color:RC.azulTit});
       }
     }
-    function grafico(s,c,x,y,w,h,doze){
-      const gc=c.slide==='GC',lab=c.usinas.map(u=>u.rot); // no slide de Ger. Compartilhada só %ECOMP (inclusive Flora)
-      const E=c.usinas.map(u=>doze?u.e12:u.e),K=c.usinas.map(u=>doze?u.c12:u.c);
-      const dados=[{name:'%ECOMP',labels:lab,values:E}];if(!gc)dados.push({name:'%CONS',labels:lab,values:K});
-      const vals=[...E,...(gc?[]:K)].filter(v=>v!=null);
-      const vMax=Math.max(1.6,Math.ceil(Math.max(0,...vals)*1.3*10)/10);
-      const apertado=w/lab.length<0.42;
-      s.addChart(pres.charts.LINE,dados,{x,y,w,h,chartColors:['2E75B6','ED7D31'],lineSize:2,lineDataSymbol:'triangle',lineDataSymbolSize:5,lineSmooth:true,
-        showValue:true,dataLabelFormatCode:'0%',dataLabelPosition:'t',dataLabelFontSize:6,dataLabelFontBold:true,dataLabelColor:'2E75B6',dataLabelFontFace:'Calibri',
-        catAxisLabelFontSize:8,catAxisLabelColor:'595959',catAxisLabelFontFace:'Calibri',catAxisLabelRotate:apertado?-45:0,catAxisLineShow:true,catAxisLineColor:'D9D9D9',
-        valAxisHidden:true,valAxisMinVal:0,valAxisMaxVal:vMax,valGridLine:{style:'none'},catGridLine:{style:'none'},showLegend:false,
-        chartArea:{fill:{color:'FFFFFF'},border:{color:'D9D9D9',pt:0.75}},
-        layout:{x:0.04,y:0.2,w:0.92,h:apertado?0.58:0.64},objectName:`Comitê ${c.nome} ${doze?'12 meses':'mês'}`});
-      const L=LOGOS[c.nome];
-      // tamanho de exibição calibrado por logo (o mesmo do RCA Mensal, que compensa as margens de cada imagem)
-      if(L){const mw=Math.min(w*0.45,1.15),mh=0.3;let ww=L.ww||0.2*L.w/L.h,hh=L.hh||0.2;
-        const k=Math.min(1,mw/ww,mh/hh);ww*=k;hh*=k;
-        s.addImage({data:L.data,x:x+w/2-ww/2,y:y+0.08+(mh-hh)/2,w:ww,h:hh,altText:c.nome})}
-      else tx(s,c.nome,{x,y:y+0.06,w,h:0.3,align:'center',valign:'middle',fontSize:13,bold:true,color:RC.azul});
-    }
     function pontos(s,pag){
       // "Principais pontos": Avenir, como no modelo; item = "CÓDIGO – texto" (código em negrito), numerado a), b), c)…
       const blocos=pag.map(c=>{const n=nota(c.nome);const itens=(n.itens&&n.itens.length?n.itens:['N/A']).filter(t=>String(t).trim());
@@ -2717,7 +2758,8 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
   const POS={1:[[4.67,YM]],2:[[2.52,YM],[6.81,YM]],3:[[0.43,YM],[4.6,YM],[8.77,YM]],
     4:[[2.52,1.6],[6.81,1.6],[2.52,4.39],[6.81,4.39]],5:[[0.43,1.6],[4.6,1.6],[8.77,1.6],[2.52,4.39],[6.81,4.39]]};
   const CW=3.99,CHh=2.62;
-  function cartao(s,c,x0,y0){
+  function cartao(s,c,x0,y0,KX=1,KY=1){
+    const CW=3.99*KX,CHh=2.62*KY;
     s.addShape(pres.shapes.RECTANGLE,{x:x0,y:y0,w:CW,h:CHh,fill:{color:'FFFFFF'},line:{color:RC.linha,width:0.75}});
     // Logo (ou nome, se não houver logo cadastrado)
     const L=LOGOS[c.nome];
@@ -2730,7 +2772,7 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     const temSaldo=c.regra==='ACR';
     const cats=['GL','SNR',...(temSaldo?['SALDO']:[]),'ECOMP'];
     const nomes={GL:'',SNR:'Saldo Não Reconhecido vs. GL',SALDO:'Saldo vs. GL',ECOMP:'ECOMP vs. GL'};
-    const k=cats.length,PX=x0+0.18,PW=CW-0.36,PY=y0+0.66,PH=1.42,BASE=PY+PH;
+    const k=cats.length,PX=x0+0.18*KX,PW=CW-0.36*KX,PY=y0+0.66*KY,PH=1.42*KY,BASE=PY+PH;
     const vMax=Math.max(1,c.pE)*1.32;
     const iS=cats.indexOf('SALDO'),iN=cats.indexOf('SNR'),iE=cats.indexOf('ECOMP');
     const base=cats.map(t=>t==='SNR'?c.pE+c.pS:t==='SALDO'?c.pE:0);
@@ -2740,7 +2782,7 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     const cores=['FFFFFF',RC.verde,RC.cinza];
     if(temSaldo){dados.push({name:'Saldo',labels:cats,values:ser('SALDO',c.pS)});cores.push(RC.salmao)}
     dados.push({name:'ECOMP',labels:cats,values:ser('ECOMP',c.pE)});cores.push(RC.azulE);
-    const CHf={x:x0+0.05,y:y0+0.5,w:CW-0.1,h:1.75};
+    const CHf={x:x0+0.05*KX,y:y0+0.5*KY,w:CW-0.1*KX,h:1.75*KY};
     s.addChart(pres.charts.BAR,dados,{...CHf,barDir:'col',barGrouping:'stacked',barGapWidthPct:60,chartColors:cores,
       valAxisHidden:true,valAxisMinVal:0,valAxisMaxVal:vMax,valGridLine:{style:'none'},catAxisHidden:true,catGridLine:{style:'none'},
       showLegend:false,layout:{x:(PX-CHf.x)/CHf.w,y:(PY-CHf.y)/CHf.h,w:PW/CHf.w,h:PH/CHf.h},objectName:`Gráfico ${c.nome}`});
@@ -2780,7 +2822,8 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
     tx(s,notas,{x:0.55,y:7.29,w:11.75,h:0.17,fontSize:7.5,bold:true,color:RC.azulTit,valign:'top',fit:'shrink'});
     if(aviso)tx(s,aviso,{x:6.1,y:7.11,w:6.2,h:0.18,fontSize:7.5,bold:true,italic:true,color:RC.azulTit,align:'right'});
   }
-  const grupos=[['ACR','Gestão Energética Autoconsumo Remoto - Cliente',false],['GC','Gestão Energética Geração Compartilhada - Cliente',true]];
+  if(O.apres)relSlidesApresentacao(O.apres);
+  const grupos=O.apres?[]:[['ACR','Gestão Energética Autoconsumo Remoto - Cliente',false],['GC','Gestão Energética Geração Compartilhada - Cliente',true]];
   grupos.forEach(([g,titulo,gc])=>{
     const L=R[g];
     for(let i=0;i<L.length;i+=REL_CFG.porSlide){
@@ -2795,6 +2838,87 @@ function relGerarPptx(PptxGenJS,R,LOGOS,O={}){
       rodape(s,gc,gc?nota:'¹ (M-1) = Unidade deslocada em um mês, referente ao mês anterior.',sem.join(' '));
     }
   });
+  // ── Apresentação ao cliente: análise do cliente, acumulado e "Ações GdE em andamento" ──
+  function relSlidesApresentacao(P){
+    const A=P.A,refMM=(()=>{const[y,m]=R.ref.split('-');return `${m}/${y.slice(2)}`})();
+    const nomeN=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const ca=[...A.ACR,...A.GC].find(c=>nomeN(c.nome)===nomeN(P.cliente));
+    const cr=[...R.ACR,...R.GC].find(c=>nomeN(c.nome)===nomeN(P.cliente));
+    const gc=(ca||cr||{}).slide==='GC';
+    const mwpTxt=v=>v>0?fmtN(v,v<10?2:1).replace(/,?0+$/,''):'—';
+    const sq=(s,x,y,cor)=>s.addShape(pres.shapes.RECTANGLE,{x,y,w:0.16,h:0.16,fill:{color:cor},line:{color:cor}});
+    const leg=(s,x,y,w,t,cor)=>tx(s,t,{x,y,w,h:0.25,fontSize:9,bold:true,color:cor});
+    // 1) Análise de compensação e geração (ou geração e injeção) do cliente
+    if(ca){
+      const nAt=P.ativos||0;
+      const s=novo(`${gc?'Geração Compartilhada':'Autoconsumo Remoto'} (${mwpTxt(ca.mwp)} MWp/ ${nAt} ${nAt===1?'ativo':'ativos'})`);
+      const sub=gc?['Análise de Geração e Injeção ¹ – ref. '+refMM,'Análise de Geração e Injeção (Últimos 12 meses) – ref. '+refMM]
+                  :['Análise de Compensação e Geração – ref. '+refMM+'¹','Análise de Compensação e Geração (Últimos 12 meses) – ref. '+refMM+'¹'];
+      [[0.86,sub[0],false],[7.53,sub[1],true]].forEach(([x,t,doze])=>{
+        tx(s,t,{x,y:1.62,w:4.94,h:0.3,align:'center',fontSize:12,bold:true,color:'44546A'});
+        grafico(s,ca,x,2.03,4.94,4.81,doze);
+        tx(s,[{text:mwpTxt(ca.mwp),options:{fontSize:14,bold:true}},{text:' MWp',options:{fontSize:11,bold:true}}],{x:x+4.94/2-0.75,y:6.36,w:1.5,h:0.34,align:'center',color:'404040'});
+      });
+      sq(s,0.53,7.13,RC.verde);leg(s,0.72,7.07,1.0,'%P90 = P90/GL',RC.verdeTx);
+      sq(s,1.91,7.12,'2E75B6');leg(s,2.1,7.07,2.2,gc?'%ECOMP = ECOMP/GL':'%ECOMP = [ECOMP]/GL (M-1)²',RC.azul);
+      if(!gc){sq(s,4.26,7.12,RC.salmao);leg(s,4.45,7.07,1.6,'%CONS = ECOMP/CONS','ED7D31')}
+      tx(s,gc?'¹ Para os ativos de Geração Compartilhada a ECOMP = Energia Injetada em Fatura da UG, para esta modalidade as comparações não utilizam a referência M-1, exceto FLORA.'
+            :'¹ %ECOMP = ECOMP/GL.   ²(M-1) = Unidade deslocada em um mês, referente ao mês anterior.',{x:0.41,y:7.29,w:12.25,h:0.2,fontSize:8,bold:true,color:RC.azulTit});
+    }
+    // 2) Acumulado desde o COD (cartão do RCA, ampliado e centralizado)
+    if(cr){
+      const s=novo(`Gestão Energética ${gc?'Geração Compartilhada':'Autoconsumo Remoto'} - ${cr.nome}`);
+      tx(s,[{text:'Geração Líquida desde o COD '},{text:'vs. ',options:{italic:true}},{text:cr.regra==='ACR'?`Energia Compensada do Cliente (ECOM) + Saldo - ref. ${refMM}`:`Energia Compensada do Cliente (ECOM)² - ref. ${refMM}`}],
+        {x:2.39,y:1.76,w:8.55,h:0.3,align:'center',fontSize:11,bold:true,color:RC.azulTit});
+      cartao(s,cr,(13.333-5.06)/2,2.35,5.06/3.99,4.23/2.62);
+      sq(s,0.51,7.14,RC.verde);leg(s,0.7,7.09,1.0,'%P90 = P90/GL',RC.verdeTx);
+      if(cr.regra==='ACR'){sq(s,1.79,7.13,RC.salmao);leg(s,1.98,7.09,1.4,'%SALDO = SALDO/GL',RC.laranja);sq(s,3.4,7.14,RC.azulE);leg(s,3.59,7.09,2.0,'%ECOMP = [ECOMP]/GL (M-1)¹',RC.azulE)}
+      else {sq(s,1.79,7.14,RC.azulE);leg(s,1.98,7.09,1.8,'%ECOMP = [ECOMP]²/GL',RC.azulE)}
+      tx(s,(cr.regra==='ACR'?'¹ (M-1) = Unidade deslocada em um mês, referente ao mês anterior.':'² Para os ativos de Geração Compartilhada a ECOMP = Energia Injetada em Fatura da UG, para esta modalidade as comparações não utilizam a referência M-1, exceto FLORA.')
+        +(cr.semDado?` Valores ${cr.nome} não disponibilizados para ${relMesExtenso(R.ref)} até o momento.`:''),
+        {x:0.46,y:7.29,w:12.25,h:0.2,fontSize:8,bold:true,color:RC.azulTit});
+    }
+    // 3) Ações GdE em andamento — texto do portal, paginado automaticamente
+    //    "# Título" = grupo (➢)  ·  "- item" = marcador  ·  "-- subitem" = submarcador  ·  linha simples = parágrafo  ·  "¹ ..." = nota de rodapé
+    const linhas=String(P.acoes||'').split('\n').map(l=>l.replace(/\s+$/,'')).filter(l=>l.trim());
+    const notas=linhas.filter(l=>/^[¹²³⁴⁵]/.test(l.trim())).map(l=>l.trim());
+    const itens=linhas.filter(l=>!/^[¹²³⁴⁵]/.test(l.trim())).map(l=>{const t=l.trim();
+      if(t.startsWith('#'))return {k:'h',t:t.replace(/^#+\s*/,'')};
+      if(/^(--|\s{2,}-|\s*•\s*•)/.test(l)||t.startsWith('--'))return {k:'b2',t:t.replace(/^-+\s*/,'')};
+      if(t.startsWith('-')||t.startsWith('•'))return {k:'b1',t:t.replace(/^[-•]\s*/,'')};
+      return {k:'p',t}});
+    itens.forEach((it,i)=>{if(it.k==='b1'&&itens[i+1]&&itens[i+1].k==='b2')it.negrito=true});
+    if(!itens.length)itens.push({k:'h',t:P.cliente},{k:'b1',t:'N/A.'});
+    // paginação: ~5,6" úteis; Avenir 15 pt ≈ 0,215" por linha e ~105 caracteres por linha.
+    // Ao virar a página repete o título do grupo; título ou item em negrito não fica sozinho no pé da página.
+    const cpl=105,altura=it=>it.k==='h'?0.46:(Math.ceil(it.t.length/(it.k==='b2'?cpl-6:cpl))*0.215+(it.negrito?0.09:0.04));
+    const LIM=5.6,paginas=[];let pag=[],h=0,grupo=null;
+    // passou pouco de um slide (até 25%): fica num slide só, com a fonte reduzida (mín. 12 pt), como no modelo da TIM
+    const total=itens.reduce((s,it)=>s+altura(it),0);
+    const esc=total>LIM&&total<=LIM*1.25?Math.max(12/15,LIM/total):1;
+    if(esc<1)paginas.push(itens.slice());
+    else itens.forEach((it,i)=>{const a=altura(it);
+      if(it.k==='h')grupo=it;
+      // o que precisa caber junto: título + 1º item; item em negrito + 1º subitem
+      const junto=(it.k==='h'||it.negrito)&&itens[i+1]?a+altura(itens[i+1]):a;
+      if(h+junto>LIM&&pag.length){paginas.push(pag);pag=[];h=0;if(grupo&&it.k!=='h'){pag.push(grupo);h+=altura(grupo)}}
+      pag.push(it);h+=a});
+    if(esc===1&&pag.length)paginas.push(pag);
+    const AV='Avenir',cor=RC.azul;
+    paginas.forEach(pg=>{
+      const s=novo('Ações GdE em andamento');
+      const run=[];
+      pg.forEach(it=>{
+        const f=v=>Math.round(v*esc*2)/2;
+        if(it.k==='h')run.push({text:'➢  '+it.t,options:{fontSize:f(20),bold:true,breakLine:true,paraSpaceBefore:run.length?f(10):0,paraSpaceAfter:f(4)}});
+        else if(it.k==='b1')run.push({text:it.t,options:{fontSize:f(15),bold:!!it.negrito,bullet:{indent:16},indentLevel:1,breakLine:true,paraSpaceBefore:it.negrito?f(6):0,paraSpaceAfter:f(2)}});
+        else if(it.k==='b2')run.push({text:it.t,options:{fontSize:f(15),bullet:{indent:16},indentLevel:2,breakLine:true,paraSpaceAfter:f(2)}});
+        else run.push({text:it.t,options:{fontSize:f(15),indentLevel:1,breakLine:true,paraSpaceAfter:f(2)}});
+      });
+      tx(s,run,{x:0.41,y:1.14,w:12.3,h:5.85,fontFace:AV,color:cor,align:'justify',valign:'top'});
+      if(notas.length)tx(s,notas.join('   '),{x:0.41,y:7.15,w:12.25,h:0.24,fontSize:8,bold:true,color:RC.azulTit});
+    });
+  }
   return pres;
 }
 // A pptxgenjs repete <a:pPr> a cada trecho de um parágrafo com alinhamento/lista; o formato só admite um.
@@ -2859,12 +2983,12 @@ function relPreparar(){
   const sel=document.getElementById('relRef'),bt=document.getElementById('relGerar');if(!sel)return;
   const atual=sel.value;
   if(!GD_MESES.length){sel.innerHTML='<option value="">—</option>';bt.disabled=true;
-    document.getElementById('relResumo').textContent='Carregue a base Controle_GdE na aba Base de dados para gerar os relatórios.';try{comPreparar()}catch(e){};return}
+    document.getElementById('relResumo').textContent='Carregue a base Controle_GdE na aba Base de dados para gerar os relatórios.';try{comPreparar();apPreparar()}catch(e){};return}
   bt.disabled=false;
   sel.innerHTML=GD_MESES.map((m,i)=>`<option value="${m}">${ymLabel(m)}${i===0?' (último)':''}</option>`).join('');
   if(GD_MESES.includes(atual))sel.value=atual;
   sel.onchange=relResumo;relResumo();
-  try{comPreparar()}catch(e){console.error(e)}
+  try{comPreparar();apPreparar()}catch(e){console.error(e)}
 }
 function relResumo(){
   const ref=document.getElementById('relRef').value;if(!ref||!window._PARSE)return;
@@ -2976,6 +3100,58 @@ async function comExportar(opts={}){
     }
     st.textContent='';toast(`Relatório gerado: ${nome}`,'ok');
   }catch(e){console.error(e);st.textContent='';toast(`Não foi possível gerar o Comitê (${e.message}).`,'danger')}
+  finally{bt.disabled=false}
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  APRESENTAÇÃO AO CLIENTE (PowerPoint) — modelo das apresentações Magalu/TIM, para qualquer cliente
+// ═════════════════════════════════════════════════════════════════════
+const AP_PADRAO={"Magalu": "# Magalu\n- Apodi\n-- Nova lista de rateio em andamento, concessionária cadastrando internamente após reunião. Prazo para o ciclo de setembro/26.\n-- Saldo da UG será distribuído para as beneficiárias com previsão para o ciclo de setembro/26.\n-- Distribuição de saldos das UCs 915174 e 915173 que totalizam um saldo de 7.561 kWh. Chamado em andamento na concessionária com prazo de retorno para o ciclo de  setembro/2026. Verificação em andamento.\n- Tapera\n-- Erro de reconhecimento de energia injetada out/25. Chamado em andamento na concessionária.\n-- Troca de lista de rateio em junho/26. Lista antiga volta em Agosto e Setembro/26. Chamado em andamento com a concessionária.\n-- 5598193 e 6272407 concessionária alegou como B optantes, porém voltam a receber crédito em agosto/26.\n- Taubaté\n-- Não recebemos as faturas das UCs de setembro/26: 10341000426/ 162881200494/ 29999500411/ 56387800448/ 20268800451.\n-- Não recebemos a fatura da UC de agosto/26: 55591300446.\n-- Não recebemos a fatura da UC de julho/26: 20268800451.\n-- Não recebemos a fatura da UC de junho/26: 3812700460.\n-- Não recebemos as faturas da UC de abril/26 a janeiro/26: 151123259.\n- São Lourenço do Sul\n-- UC 48453994 não compensou créditos em Abril/26 e Maio/26 – Chamado em andamento com a concessionária. Prazo para 26/10/2026.\n- Luís Eduardo Magalhães\n-- Erro no reconhecimento de energia no período de Abril/25 a Agosto/25 (70.140 kWh). Chamado em andamento na concessionária.\n-- Erro no reconhecimento de energia injetada da UFV2 11233013 nos períodos de maio/26 e junho/26 (246.763 kWh). Chamado em andamento com a concessionária.\n- São José do Cedro\n-- Distribuição de saldo da UC 23164566 de 13.542 kWh em andamento com a ouvidoria da concessionária.\n-- Erro no reconhecimento de 53.586,60 kWh para o ano de 2025. Chamado em andamento com a concessionária.\n-- Contratação de demanda de geração para as duas UFVs. Concluído.\n-- Nova Lista de Rateio em análise interna na GDSUN", "TIM": "# TIM\nFaturas Faltantes:\n- Agosto/26 – 44 faturas faltantes;\n- Julho/26 – 14 faturas faltantes;\n- Junho/26 – 5 faturas faltantes;\n- Maio/26 – 4 faturas faltantes;\n- Abril/26 –5 faturas faltantes\n- Março/26 – 5 faturas faltantes;\n- Fevereiro/26 – 4 faturas faltantes;\n- Janeiro/26 – 2 faturas faltantes;\n- Divergência no faturamento de 16 meses que resultaram um acumulo de R$83,24 de saldo para a TIM até a competência de abril/2026.\n# REPLACE/ ORANGE\n- N/A.\n# GDSUN\n- Atendimento contratual últimos 12 meses – 91,33%¹ (206,68 MWh) - Último Trimestre atendimento de 77,22%¹ (159,31 MWh).\n- Meta Mínima: 90% de 0,31MWm = 203,67 MWh.\n- Referência Energia Injetada de ago/25 a jul/26.\n- UC 931274400 – Redistribuição de saldo de 6,459 MWh em andamento.\n- UC 945013042 – Redistribuição de saldo de 10,508 MWh em andamento na concessionária (previsão para out/26).\n- UC 93140217 Desativada - Saldo de 10 MWh em andamento na concessionária (previsão para out/26).\n- Nova lista de rateio em andamento na concessionária com previsão para o ciclo de set/26.\n¹ Número prévio, sujeito a alteração."};
+const AP_KEY='gdsun.apresentacao.v1';
+let apDados=(()=>{try{return JSON.parse(localStorage.getItem(AP_KEY)||'null')}catch(e){return null}})()||{textos:{}};
+apDados.textos=apDados.textos||{};
+function apTextoPadrao(cli){const k=Object.keys(AP_PADRAO).find(x=>_nrm(x)===_nrm(cli));return k?AP_PADRAO[k]:`# ${cli}\n- N/A.`}
+function apTexto(cli){return apDados.textos[cli]!=null?apDados.textos[cli]:apTextoPadrao(cli)}
+function apSalvarTexto(){const cli=document.getElementById('apCli').value;if(!cli)return;
+  apDados.textos[cli]=document.getElementById('apTexto').value;try{localStorage.setItem(AP_KEY,JSON.stringify(apDados))}catch(e){}}
+function apCarregarTexto(){const cli=document.getElementById('apCli').value;document.getElementById('apTexto').value=cli?apTexto(cli):''}
+function apRestaurar(){const cli=document.getElementById('apCli').value;if(!cli)return;
+  delete apDados.textos[cli];try{localStorage.setItem(AP_KEY,JSON.stringify(apDados))}catch(e){}apCarregarTexto();toast(`Texto de ${cli} restaurado.`,'ok')}
+function apPreparar(){
+  const sc=document.getElementById('apCli'),sr=document.getElementById('apRef'),bt=document.getElementById('apGerar');if(!sc)return;
+  if(!window._PARSE||!GD_MESES.length){sc.innerHTML=sr.innerHTML='<option value="">—</option>';bt.disabled=true;return}
+  bt.disabled=false;
+  const cAtual=sc.value,rAtual=sr.value;
+  const clis=[...new Set(window._PARSE.recs.filter(r=>r.cliente&&((r.cp||0)>0||(r.ij||0)>0)).map(r=>r.cliente))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  sc.innerHTML=clis.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(clis.includes(cAtual))sc.value=cAtual;
+  sr.innerHTML=GD_MESES.map((m,i)=>`<option value="${m}">${ymLabel(m)}${i===0?' (último)':''}</option>`).join('');
+  if(GD_MESES.includes(rAtual))sr.value=rAtual;
+  apCarregarTexto();
+}
+async function apExportar(opts={}){
+  const st=document.getElementById('apStatus'),bt=document.getElementById('apGerar');
+  const cli=opts.cliente||document.getElementById('apCli').value,ref=opts.ref||document.getElementById('apRef').value;
+  if(!window._PARSE||!BASE_META.loaded){toast('Carregue a base Controle_GdE antes de exportar.','warn');return}
+  bt.disabled=true;st.textContent='Montando a apresentação…';
+  try{
+    const Lib=await relCarregarLib();
+    const recs=window._PARSE.recs,R=relCalcular(recs,ref),A=relAnalise(recs,ref);
+    if(![...A.ACR,...A.GC,...R.ACR,...R.GC].some(c=>_nrm(c.nome)===_nrm(cli)))throw new Error(`${cli} não tem dados até ${ymLabel(ref)}`);
+    const ativos=new Set(recs.filter(r=>_nrm(r.cliente)===_nrm(cli)&&r.mes===ref).map(r=>r.ufv)).size;
+    const pres=relGerarPptx(Lib,R,REL_LOGOS,{apres:{cliente:cli,A,ativos,acoes:opts.acoes??apTexto(cli),img:COMITE_IMG}});
+    const hoje=new Date(),nome=`${hoje.getFullYear()}_${String(hoje.getMonth()+1).padStart(2,'0')}_Apresentação_${cli.replace(/[^\wÀ-ú-]+/g,'_')}_ref_${ref.replace('-','_')}.pptx`;
+    if(!window.JSZip){await pres.writeFile({fileName:nome})}
+    else{
+      const fin=await relFinalizar(await pres.write({outputType:'arraybuffer'}),window.JSZip);
+      if(opts.retornar){st.textContent='';return fin}
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([fin],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'}));
+      a.download=nome;document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+    }
+    st.textContent='';toast(`Apresentação gerada: ${nome}`,'ok');
+  }catch(e){console.error(e);st.textContent='';toast(`Não foi possível gerar a apresentação (${e.message}).`,'danger')}
   finally{bt.disabled=false}
 }
 
