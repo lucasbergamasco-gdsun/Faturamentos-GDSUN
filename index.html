@@ -223,7 +223,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.4 · 27/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.5 · 27/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -429,7 +429,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.4 (27/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.5 (27/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -469,6 +469,20 @@ function showError(msg){document.getElementById('loading').style.display='none';
 function resetUpload(){dropzone.style.display='block';document.getElementById('loading').style.display='none';document.getElementById('results').style.display='none';document.getElementById('errorBox').innerHTML='';fileInput.value=''}
 
 // ── UFV matcher ──────────────────────────────────────────────────────
+// ── Identificação da UFV pelo número da UG (unidade geradora) que vem na medição ──
+// Fonte: coluna "UG" do Controle_GdE; os números abaixo valem enquanto a coluna estiver vazia para a usina.
+const UG_UFV_FIXO={
+  '235714105429':'São Mateus I',   // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 13.403,78)
+  '235717105474':'São Mateus II',  // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 11.271,31)
+};
+function ugNorm(v){if(v==null||v==='')return null;let s=String(v).trim().replace(/\.0+$/,'').replace(/\D/g,'').replace(/^0+/,'');return s.length>=5?s:null}
+function ufvPorUG(num){
+  const n=ugNorm(num);if(!n)return null;
+  const recs=(window._PARSE&&window._PARSE.recs)||[];
+  const r=recs.filter(x=>x.ugnum===n&&x.ufv).sort((a,b)=>a.mes<b.mes?1:-1)[0];
+  if(r)return {ufv:r.ufv,cliente:r.cliente,fonte:'Controle_GdE'};
+  return UG_UFV_FIXO[n]?{ufv:UG_UFV_FIXO[n],cliente:null,fonte:'cadastro do portal'}:null;
+}
 function guessUFV(fileName){
   // Remove extensão e palavras genéricas, substitui _ por espaço, quebra apenas no primeiro -
   const raw=fileName.replace(/\.xlsx?$/i,'').replace(/_/g,' ');
@@ -602,10 +616,13 @@ function runAnalysis(wb,fileName){
             return (rows[7]||[]).some(c=>String(c).includes('Pot. Inst'));
           }catch(e){return false;}
         })();
-        const hasIgua=hasIguaFileName||hasIguaContent;
+        // Nome do arquivo com o cliente vale mais que a heurística de conteúdo
+        // (medições da Raia, como São Mateus, também têm "Pot. Inst." na linha 8)
+        const hasRaiaFileName=/raia|drogasil/i.test(fileName);
+        const hasIgua=hasIguaFileName||(hasIguaContent&&!hasRaiaFileName);
         const hasDpsp=fileNameLower.includes('dpsp')||wb.SheetNames.some(n=>n.toLowerCase().includes('planilhamedicao'));
         // Iguá e DPSP verificados ANTES de hasUFV pois também têm aba tipo 'Medição'
-        const clienteDetectado=hasClaro?'claro':hasCalcOM?'magalu':hasDpsp?'dpsp':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
+        const clienteDetectado=hasClaro?'claro':hasCalcOM?'magalu':hasDpsp?'dpsp':hasRaiaFileName&&!hasIguaFileName?'raia':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
         if(clienteDetectado!==currentClient){
           console.warn('Modelo detectado automaticamente: '+clienteDetectado+' (selecionado: '+currentClient+')');
           // usa o cliente detectado (identificação da UFV e GL do banco dependem dele) e marca o botão
@@ -796,13 +813,15 @@ function analyzeRaia(wb,fileName){
 
     // Dados da UG (injeção) — linha 12 do sheet (índice 12 no array)
     const ugHRow=findHeaderRow(rawRows,['Energia Injetada','Unidade Geradora']);
-    let ugInjecao=0,ugSaldoMesSeg=0;
+    let ugInjecao=0,ugSaldoMesSeg=0,ugNumero=null;
     if(ugHRow){
       const ugDataRow=rawRows[rawRows.indexOf(ugHRow)+1];
       const injCol=ugHRow.findIndex(h=>String(h).includes('Energia Injetada')&&!String(h).includes('Ponta')&&!String(h).includes('Fora'));
       const saldoUGCol=ugHRow.findIndex(h=>String(h).includes('Crédito Mês Seguinte'));
       ugInjecao=pf(ugDataRow[injCol]);
       ugSaldoMesSeg=pf(ugDataRow[saldoUGCol]);
+      const ugNumCol=ugHRow.findIndex(h=>/unidade geradora/i.test(String(h)));
+      if(ugNumCol>=0)ugNumero=ugNorm(ugDataRow[ugNumCol]);
     }
     // Mês da fatura desta UG: para REP_UG lê linha 14; caso contrário usa detectedMes
     let ugMes=detectedMes;
@@ -815,7 +834,7 @@ function analyzeRaia(wb,fileName){
         if(m){ugMes=m;break;}
       }
     }
-    ugSummary.push({ug:sName,injecao:ugInjecao,saldoUG:ugSaldoMesSeg,mes:ugMes});
+    ugSummary.push({ug:sName,injecao:ugInjecao,saldoUG:ugSaldoMesSeg,mes:ugMes,uc:ugNumero});
 
     // Colunas de dados das UCs
     const cols={
@@ -977,7 +996,7 @@ function analyzeClaro(wb,fileName){
     injecao:pf(r[gc.ijFP])+(gc.ijP>=0?pf(r[gc.ijP]):0),icms:gc.icms>=0?pf(r[gc.icms]):null,
     credAnt:gc.credAnt>=0?pf(r[gc.credAnt]):0,credSeg:(gc.credP>=0?pf(r[gc.credP]):0)+(gc.credFP>=0?pf(r[gc.credFP]):0)}));
   const mesUG=mes?prevMonth(mes):null; // energia da UG sempre M-1 da compensação
-  const ugSummary=geradoras.map(g=>({ug:g.nome,injecao:g.injecao,saldoUG:0,mes:mesUG}));
+  const ugSummary=geradoras.map(g=>({ug:g.nome,injecao:g.injecao,saldoUG:0,mes:mesUG,uc:ugNorm(g.uc)}));
   // Beneficiárias (beneficiarias1 ↔ 1ª geradora, …)
   const bens=wb.SheetNames.filter(n=>/^benefici/i.test(n)).sort((a,b)=>(+a.replace(/\D/g,'')||0)-(+b.replace(/\D/g,'')||0));
   if(!bens.length){showError('Abas de beneficiárias não encontradas. Verifique o modelo Claro.');return}
@@ -1479,6 +1498,17 @@ function topType(u){
 }
 
 function renderResults(ucs,fileName,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
+  // Número da UG na medição → UFV (ex.: "São Mateus" no nome do arquivo, mas a UG é a de São Mateus II)
+  {
+    const nums=[...new Set((ugSummary||[]).map(g=>g.uc).filter(Boolean))];
+    const achados=nums.map(n=>({n,r:ufvPorUG(n)})).filter(x=>x.r);
+    const ufvs=[...new Set(achados.map(x=>x.r.ufv))];
+    if(ufvs.length===1&&ufvs[0]!==ufv){
+      const ant=ufv;ufv=ufvs[0];
+      opts={...opts,avisos:[...(opts.avisos||[]),{id:'ufv_ug',tipo:'info',titulo:'Usina identificada pelo número da UG',
+        msg:`A medição traz a UG <strong>${esc(achados.map(x=>x.n).join(', '))}</strong>, que pertence a <strong>${esc(ufv)}</strong> (fonte: ${esc(achados[0].r.fonte)}).${ant?` Pelo nome do arquivo seria ${esc(ant)}.`:''} A análise usa ${esc(ufv)}.`,detalhe:null,extras:null}]};
+    }
+  }
   // Alerta de status do arquivo
   const fileStatus=statusFromFileName(fileName);
   const statusChecks=[];
@@ -1598,7 +1628,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.4 · 27/10/26';
+const PORTAL_VERSAO='v3.5 · 27/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -1640,6 +1670,7 @@ const CAMPOS=[
   {k:'cp',lbl:'CP (compensada)',energia:true,exact:['cp','cp mwh','cp kwh','compensado','compensada','compensacao','energia compensada'],tok:['cp'],inc:['compens']},
   {k:'saldo',lbl:'Saldo (total)',energia:true,exact:['saldo','saldo mwh','saldo kwh','saldo acumulado','saldo final','saldo total'],tok:['saldo'],inc:['saldo']},
   {k:'potencia',lbl:'Potência instalada',exact:['potencia instalada kwp','potencia instalada','potencia instalada mwp','potencia kwp','potencia'],tok:['potencia'],inc:['potencia']},
+  {k:'ugnum',lbl:'Nº da UG (unidade geradora)',exact:['ug','uc geradora','unidade geradora','numero da ug'],tok:[],inc:[]},
   {k:'consumo_ug',lbl:'Consumo UG',energia:true,exact:['consumo ug','consumo da ug','consumo ug mwh','consumo ug kwh'],tok:[],inc:['consumo ug']},
   {k:'consumo',lbl:'Consumo',energia:true,exact:['consumo','consumo mwh','consumo kwh','energia consumida'],tok:['consumo'],inc:['consum']},
 ];
@@ -1735,7 +1766,7 @@ function parseControle(buf){
       ufv:String(ufv).trim(),
       mod:get(row,'modalidade')!=null?String(get(row,'modalidade')).trim():null,
       mes,gl:toNum(get(row,'gl')),ij:toNum(get(row,'ij')),cp:toNum(get(row,'cp')),
-      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),pot:toNum(get(row,'potencia')),
+      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),ugnum:ugNorm(get(row,'ugnum')),pot:toNum(get(row,'potencia')),
     });
   }
   // Potência: padrão kWp (como na planilha); cabeçalho em MWp é convertido
