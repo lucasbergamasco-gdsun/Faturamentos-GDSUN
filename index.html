@@ -223,7 +223,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.5 · 27/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.6 · 27/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -429,7 +429,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.5 (27/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.6 (27/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -472,8 +472,8 @@ function resetUpload(){dropzone.style.display='block';document.getElementById('l
 // ── Identificação da UFV pelo número da UG (unidade geradora) que vem na medição ──
 // Fonte: coluna "UG" do Controle_GdE; os números abaixo valem enquanto a coluna estiver vazia para a usina.
 const UG_UFV_FIXO={
-  '235714105429':'São Mateus I',   // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 13.403,78)
-  '235717105474':'São Mateus II',  // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 11.271,31)
+  '235714105429':{ufv:'São Mateus I',cliente:'Raia Drogasil'},   // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 13.403,78)
+  '235717105474':{ufv:'São Mateus II',cliente:'Raia Drogasil'},  // EDP ES — confirmado pela medição de ago/26 (fatura da UG R$ 11.271,31)
 };
 function ugNorm(v){if(v==null||v==='')return null;let s=String(v).trim().replace(/\.0+$/,'').replace(/\D/g,'').replace(/^0+/,'');return s.length>=5?s:null}
 function ufvPorUG(num){
@@ -481,7 +481,25 @@ function ufvPorUG(num){
   const recs=(window._PARSE&&window._PARSE.recs)||[];
   const r=recs.filter(x=>x.ugnum===n&&x.ufv).sort((a,b)=>a.mes<b.mes?1:-1)[0];
   if(r)return {ufv:r.ufv,cliente:r.cliente,fonte:'Controle_GdE'};
-  return UG_UFV_FIXO[n]?{ufv:UG_UFV_FIXO[n],cliente:null,fonte:'cadastro do portal'}:null;
+  return UG_UFV_FIXO[n]?{...UG_UFV_FIXO[n],fonte:'cadastro do portal'}:null;
+}
+// Modelo do validador a partir do cliente dono da UG
+function modeloDoCliente(c){const n=_nrm(c||'');
+  return /raia|drogasil/.test(n)?'raia':/igua/.test(n)?'igua':/magalu|magazine/.test(n)?'magalu':/^tim/.test(n)?'tim':/dpsp/.test(n)?'dpsp':/claro/.test(n)?'claro':null}
+// Procura a tabela da UG ("Unidade Geradora") nas primeiras linhas das abas e devolve o dono da UG
+function donoDaMedicao(wb){
+  for(const sn of wb.SheetNames.slice(0,6)){
+    try{
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:false}).slice(0,40);
+      for(let i=0;i<rows.length-1;i++){
+        const c=rows[i].findIndex(x=>/unidade geradora/i.test(String(x)));
+        if(c<0)continue;
+        const r=ufvPorUG(rows[i+1][c]);
+        if(r)return {...r,modelo:modeloDoCliente(r.cliente)};
+      }
+    }catch(e){}
+  }
+  return null;
 }
 function guessUFV(fileName){
   // Remove extensão e palavras genéricas, substitui _ por espaço, quebra apenas no primeiro -
@@ -622,7 +640,9 @@ function runAnalysis(wb,fileName){
         const hasIgua=hasIguaFileName||(hasIguaContent&&!hasRaiaFileName);
         const hasDpsp=fileNameLower.includes('dpsp')||wb.SheetNames.some(n=>n.toLowerCase().includes('planilhamedicao'));
         // Iguá e DPSP verificados ANTES de hasUFV pois também têm aba tipo 'Medição'
-        const clienteDetectado=hasClaro?'claro':hasCalcOM?'magalu':hasDpsp?'dpsp':hasRaiaFileName&&!hasIguaFileName?'raia':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
+        // O dono da UG (pelo número da unidade geradora na medição) vale mais que o nome e a aparência do arquivo
+        const dono=hasClaro||hasCalcOM?null:donoDaMedicao(wb);
+        const clienteDetectado=hasClaro?'claro':hasCalcOM?'magalu':(dono&&dono.modelo)?dono.modelo:hasDpsp?'dpsp':hasRaiaFileName&&!hasIguaFileName?'raia':hasIgua?'igua':hasUFV?'raia':hasRelatorio?'tim':currentClient;
         if(clienteDetectado!==currentClient){
           console.warn('Modelo detectado automaticamente: '+clienteDetectado+' (selecionado: '+currentClient+')');
           // usa o cliente detectado (identificação da UFV e GL do banco dependem dele) e marca o botão
@@ -1628,7 +1648,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.5 · 27/10/26';
+const PORTAL_VERSAO='v3.6 · 27/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
