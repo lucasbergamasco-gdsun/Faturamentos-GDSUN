@@ -226,13 +226,14 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.7 · 28/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.8 · 28/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
   <button class="tab" role="tab" data-tab="validador" onclick="goTab('validador')"><i class="ti ti-file-check"></i> Validador de medições</button>
   <button class="tab" role="tab" data-tab="painel" onclick="goTab('painel')"><i class="ti ti-chart-bar"></i> Painel GD</button>
   <button class="tab" role="tab" data-tab="rateio" onclick="goTab('rateio')"><i class="ti ti-chart-pie"></i> Rateio</button>
+  <button class="tab" role="tab" data-tab="distribuicao" onclick="goTab('distribuicao')"><i class="ti ti-arrows-split"></i> Distribuição de saldo</button>
   <button class="tab" role="tab" data-tab="relatorios" onclick="goTab('relatorios')"><i class="ti ti-file-analytics"></i> Relatórios</button>
   <button class="tab" role="tab" data-tab="base" onclick="goTab('base')"><i class="ti ti-database"></i> Base de dados</button>
 </div></nav>
@@ -380,6 +381,33 @@ header{gap:1rem}
     <div id="rtResultado" hidden></div>
   </div>
 
+  <div class="tab-panel" id="tab-distribuicao" role="tabpanel" hidden>
+    <div style="margin-bottom:1.5rem">
+      <h1 style="font-size:22px;font-weight:500;margin-bottom:4px">Distribuição de saldo</h1>
+      <p style="font-size:14px;color:var(--text2)">Confirme pelas medições se o saldo distribuído chegou às UCs: a partir do mês seguinte à confirmação, os créditos que a UC recebeu além do rateio devem somar o valor distribuído.</p>
+    </div>
+    <div class="rel-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+      <section class="rel-card">
+        <div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-file-download"></i></span><div><strong>1. Planilha de distribuição</strong></div></div>
+        <p class="muted" style="font-size:13px;margin:.4rem 0 .6rem">Baixe o modelo, preencha uma linha por UC que recebeu saldo (UC, kWh distribuído e data de confirmação) e envie abaixo.</p>
+        <button class="btn" onclick="dsModelo()"><i class="ti ti-download"></i> Baixar modelo</button>
+        <div class="upload-zone" id="dsDropLista" style="margin-top:.75rem;padding:1.1rem" onclick="document.getElementById('dsFileLista').click()">
+          <input type="file" id="dsFileLista" accept=".xlsx,.xls" style="display:none">
+          <i class="ti ti-file-spreadsheet"></i><p class="upl-main" style="font-size:14px">Enviar planilha preenchida</p>
+        </div>
+      </section>
+      <section class="rel-card">
+        <div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-files"></i></span><div><strong>2. Medições</strong></div></div>
+        <p class="muted" style="font-size:13px;margin:.4rem 0 .6rem">Envie a medição do <strong>mês da confirmação</strong> (ponto de partida do saldo) e as dos meses seguintes. Cada mês é comparado com o saldo final da medição do mês anterior. Qualquer modelo que o validador lê; pode enviar várias de uma vez.</p>
+        <div class="upload-zone" id="dsDropMed" style="padding:1.1rem" onclick="document.getElementById('dsFileMed').click()">
+          <input type="file" id="dsFileMed" accept=".xlsx,.xls" multiple style="display:none">
+          <i class="ti ti-file-spreadsheet"></i><p class="upl-main" style="font-size:14px">Enviar medições</p>
+        </div>
+      </section>
+    </div>
+    <div id="dsResultado"></div>
+  </div>
+
   <div class="tab-panel" id="tab-relatorios" role="tabpanel" hidden>
     <div style="margin-bottom:1.5rem">
       <h1 style="font-size:22px;font-weight:500;margin-bottom:4px">Relatórios</h1>
@@ -447,7 +475,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.7 (28/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.8 (28/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -483,7 +511,7 @@ fileInput.addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target
 
 function selectClient(c,btn){document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentClient=c}
 function setLoading(msg){dropzone.style.display='none';document.getElementById('loading').style.display='block';document.getElementById('results').style.display='none';document.getElementById('errorBox').innerHTML='';document.getElementById('loadingMsg').textContent=msg}
-function showError(msg){document.getElementById('loading').style.display='none';dropzone.style.display='block';document.getElementById('errorBox').innerHTML=`<div class="error-box"><i class="ti ti-alert-circle"></i> ${msg}</div>`}
+function showError(msg){if(window.__dsCaptura){window.__dsCaptura.erro=String(msg).replace(/<[^>]+>/g,'');return}document.getElementById('loading').style.display='none';dropzone.style.display='block';document.getElementById('errorBox').innerHTML=`<div class="error-box"><i class="ti ti-alert-circle"></i> ${msg}</div>`}
 function resetUpload(){dropzone.style.display='block';document.getElementById('loading').style.display='none';document.getElementById('results').style.display='none';document.getElementById('errorBox').innerHTML='';fileInput.value=''}
 
 // ── UFV matcher ──────────────────────────────────────────────────────
@@ -1547,6 +1575,8 @@ function renderResults(ucs,fileName,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
         msg:`A medição traz a UG <strong>${esc(achados.map(x=>x.n).join(', '))}</strong>, que pertence a <strong>${esc(ufv)}</strong> (fonte: ${esc(achados[0].r.fonte)}).${ant?` Pelo nome do arquivo seria ${esc(ant)}.`:''} A análise usa ${esc(ufv)}.`,detalhe:null,extras:null}]};
     }
   }
+  // Modo de captura (aba Distribuição de saldo): entrega os dados lidos, sem desenhar o resultado do validador
+  if(window.__dsCaptura){window.__dsCaptura.push({ucs,fileName,ufv,mes,ugSummary,opts});return}
   // Alerta de status do arquivo
   const fileStatus=statusFromFileName(fileName);
   const statusChecks=[];
@@ -1666,7 +1696,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.7 · 28/10/26';
+const PORTAL_VERSAO='v3.8 · 28/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -2432,8 +2462,9 @@ function painelBuild(){
 //  ABAS + AVISOS
 // ═════════════════════════════════════════════════════════════════════
 function goTab(t){
-  if(!['validador','painel','rateio','relatorios','base'].includes(t))t='validador';
+  if(!['validador','painel','rateio','distribuicao','relatorios','base'].includes(t))t='validador';
   if(t==='rateio')try{rtInitDrop()}catch(e){}
+  if(t==='distribuicao')try{dsInitDrop()}catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t?'true':'false'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='tab-'+t);
   try{if(location.hash!=='#'+t)history.replaceState(null,'','#'+t)}catch(e){/* pré-visualização em iframe: sem hash */}
@@ -3519,6 +3550,202 @@ async function rtExportar(opts={}){
     toast(`Planilha exportada: ${nome}`,'ok');
   }catch(e){console.error(e);toast(`Não foi possível exportar (${e.message}).`,'danger')}
   finally{if(bt)bt.disabled=false}
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  DISTRIBUIÇÃO DE SALDO — confirma, pelas medições, se o saldo distribuído chegou às UCs
+// ═════════════════════════════════════════════════════════════════════
+// A distribuição só ocorre após o desligamento da UC de origem (que some da medição); a verificação é feita
+// na UC que recebeu: créditos que entraram além do rateio do mês = excedente. Somado nos meses após a
+// confirmação, o excedente deve chegar ao valor distribuído.
+//   excedente(m) = [saldo final(m) − saldo de partida] + compensado(m) − %rateio × injeção da UG(m)
+//   saldo de partida = saldo final da UC na medição do mês anterior (o crédito proveniente da própria fatura não é usado)
+const DS_TOL=0.05; // ±5% do valor distribuído
+let DS={lista:null,meds:[],res:null};
+const dsUC=v=>{const s=String(v??'').replace(/\.0+$/,'').replace(/\D/g,'').replace(/^0+/,'');return s.length>=4?s:null};
+function dsData(v){
+  if(v instanceof Date&&!isNaN(v))return v;
+  if(typeof v==='number'&&v>20000&&v<80000)return new Date(Math.round((v-25569)*864e5));
+  const m=String(v??'').trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){const y=m[3].length===2?2000+ +m[3]:+m[3];return new Date(Date.UTC(y,+m[2]-1,+m[1]))}
+  const iso=String(v??'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(iso)return new Date(Date.UTC(+iso[1],+iso[2]-1,+iso[3]));
+  return null;
+}
+const dsYM=d=>`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+const dsDia=d=>`${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`;
+// ── Planilha padrão (download) ──
+async function dsModelo(opts={}){
+  const ExcelJS=await anaCarregarLib();const wb=new ExcelJS.Workbook();wb.creator='Portal GD SUN';
+  const ws=wb.addWorksheet('Distribuição',{views:[{state:'frozen',ySplit:1}]});
+  const cab=[['Usina',28],['UC (instalação)',20],['kWh distribuído',16],['Data de confirmação',20],['Observação',40]];
+  cab.forEach(([t,w],k)=>{const c=ws.getRow(1).getCell(k+1);c.value=t;c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF185FA5'}};c.alignment={vertical:'middle'};ws.getColumn(k+1).width=w});
+  ws.getRow(1).height=22;
+  for(let r=2;r<=500;r++){
+    ws.getCell(`B${r}`).numFmt='@';ws.getCell(`C${r}`).numFmt='#,##0.00';ws.getCell(`D${r}`).numFmt='dd/mm/yyyy';
+    ws.getCell(`C${r}`).dataValidation={type:'decimal',operator:'greaterThan',formulae:[0],allowBlank:true,showErrorMessage:true,errorTitle:'kWh distribuído',error:'Informe um número maior que zero (kWh).'};
+    ws.getCell(`D${r}`).dataValidation={type:'date',operator:'greaterThan',formulae:[new Date(Date.UTC(2015,0,1))],allowBlank:true,showErrorMessage:true,errorTitle:'Data de confirmação',error:'Informe uma data (dd/mm/aaaa).'};
+  }
+  const ins=wb.addWorksheet('Instruções');ins.getColumn(1).width=26;ins.getColumn(2).width=90;
+  const L=[['Como preencher',''],['Usina','Nome da usina como no Controle_GdE (opcional — a usina também é identificada pela medição).'],
+    ['UC (instalação)','Número da UC que RECEBEU o saldo, como aparece na medição. Uma linha por UC.'],
+    ['kWh distribuído','Quantidade de kWh distribuída para a UC.'],
+    ['Data de confirmação','Data em que a concessionária confirmou a distribuição. A verificação começa no mês seguinte.'],
+    ['Observação','Livre (ex.: protocolo, UC de origem).'],['',''],
+    ['Medições','Envie a medição do mês da confirmação (ponto de partida do saldo) e as dos meses seguintes. Cada mês é comparado com o saldo final da medição do mês anterior.'],['',''],
+    ['Exemplo de linha',''],['Usina','Mãe do Rio'],['UC (instalação)','359495601309'],['kWh distribuído','1250'],['Data de confirmação','15/06/2026'],['Observação','Protocolo 123456 — saldo da UC 3594950 desligada']];
+  L.forEach(([a,b],k)=>{const r=ins.getRow(k+1);r.getCell(1).value=a;r.getCell(2).value=b;if(k===0||a==='Exemplo de linha'||a==='Medições')r.getCell(1).font={bold:true};r.getCell(2).alignment={wrapText:true}});
+  const buf=await wb.xlsx.writeBuffer();if(opts.retornar)return buf;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download='Modelo_Distribuicao_de_Saldo.xlsx';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+}
+// ── Leitura da planilha preenchida ──
+function dsLerLista(wb){
+  for(const sn of wb.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
+    for(let h=0;h<Math.min(rows.length,10);h++){
+      const cab=rows[h].map(x=>rtNrm(x));
+      const cUC=cab.findIndex(x=>/^uc|instala/.test(x)),cK=cab.findIndex(x=>x.includes('kwh')),cD=cab.findIndex(x=>x.includes('data'));
+      if(cUC<0||cK<0||cD<0)continue;
+      const cU=cab.findIndex(x=>x.includes('usina')||x==='ufv'),cO=cab.findIndex(x=>x.includes('observ'));
+      const itens=[],erros=[];
+      for(let r=h+1;r<rows.length;r++){
+        const row=rows[r];if(!row.some(v=>String(v).trim()))continue;
+        const uc=dsUC(row[cUC]),kwh=rtNum(row[cK]),dt=dsData(row[cD]);
+        if(!uc||!(kwh>0)||!dt){erros.push(`linha ${r+1}: ${!uc?'UC':!(kwh>0)?'kWh':'data'} inválida`);continue}
+        itens.push({linha:r+1,usina:cU>=0?String(row[cU]).trim():'',uc,ucTxt:String(row[cUC]).trim(),kwh,data:dt,mesConf:dsYM(dt),obs:cO>=0?String(row[cO]).trim():''});
+      }
+      return {sheet:sn,itens,erros};
+    }
+  }
+  return null;
+}
+// ── Medições: o validador lê o arquivo (mesma detecção de modelo/usina) e entrega os dados aqui ──
+function dsLerMedicao(buf,fileName){
+  const wb=XLSX.read(buf,{type:'array',cellDates:true});
+  const cap=[];window.__dsCaptura=cap;const cli=currentClient;
+  try{runAnalysis(wb,fileName)}catch(e){cap.erro=e.message}
+  finally{window.__dsCaptura=null;try{const b=[...document.querySelectorAll('.cbtn')].find(x=>(x.getAttribute('onclick')||'').includes(`'${cli}'`));if(b)selectClient(cli,b)}catch(e){}}
+  if(!cap.length)return {erro:cap.erro||'Modelo de medição não reconhecido.',fileName};
+  const r=cap[0];
+  return {fileName,ufv:r.ufv,mes:r.mes,ucs:r.ucs,ug:r.ugSummary||[],cliente:clienteLabel()};
+}
+// ── Análise ──
+function dsAnalisar(lista,meds){
+  // índice por UC: medições ordenadas por mês
+  const porUC={};
+  meds.forEach(md=>{
+    const inj={};(md.ug||[]).forEach(g=>inj[g.ug]=(inj[g.ug]||0)+(g.injecao||0));
+    const injUnica=(md.ug||[]).length===1?md.ug[0].injecao:null;
+    md.ucs.forEach(u=>{const k=dsUC(u.uc);if(!k)return;
+      const ij=inj[u.ug]!=null?inj[u.ug]:injUnica;
+      (porUC[k]??=[]).push({mes:md.mes,ufv:md.ufv,fileName:md.fileName,u,inj:ij})});
+  });
+  Object.values(porUC).forEach(l=>l.sort((a,b)=>a.mes<b.mes?-1:1));
+  const calcMes=(l,k)=>{const e=l[k],u=e.u;
+    if(!u.hasData||u.faturaAntiga||e.inj==null)return {mes:e.mes,semDados:true,motivo:u.faturaAntiga?`fatura de ${u.mesFatura} reaproveitada`:!u.hasData?'sem fatura no mês':'injeção da UG não identificada',fileName:e.fileName};
+    // ponto de partida: saldo final da UC na medição do mês anterior — sem ela, o mês não é calculado
+    const ant=l.find(x=>x.mes===rtAdd(e.mes,-1));
+    if(!ant)return {mes:e.mes,semDados:true,motivo:`falta a medição de ${rtLbl(rtAdd(e.mes,-1))} (saldo de partida)`,fileName:e.fileName};
+    if(!ant.u.hasData||ant.u.faturaAntiga)return {mes:e.mes,semDados:true,motivo:`sem fatura da UC na medição de ${rtLbl(ant.mes)} (saldo de partida)`,fileName:e.fileName};
+    const partida=ant.u.saldo;
+    const recebido=u.saldo-partida+u.compensada,esperado=u.pct*e.inj;
+    return {mes:e.mes,recebido,esperado,exced:recebido-esperado,partida,fonte:`saldo final de ${rtLbl(ant.mes)}`,saldo:u.saldo,comp:u.compensada,pct:u.pct,inj:e.inj,fileName:e.fileName,ufv:e.ufv};
+  };
+  // ruído: excedente das UCs sem distribuição (deveria ser ~0)
+  const naLista=new Set(lista.map(i=>i.uc));const ruido=[];
+  Object.entries(porUC).forEach(([k,l])=>{if(naLista.has(k))return;l.forEach((_,j)=>{const c=calcMes(l,j);if(!c.semDados&&c.esperado>0)ruido.push(Math.abs(c.exced))})});
+  ruido.sort((a,b)=>a-b);const ruidoP90=ruido.length?ruido[Math.floor(ruido.length*0.9)]:null,ruidoMed=ruido.length?ruido[Math.floor(ruido.length/2)]:null;
+  const itens=lista.map(it=>{
+    const l=porUC[it.uc]||[];const meses=[];
+    l.forEach((e,j)=>{if(e.mes>it.mesConf)meses.push(calcMes(l,j))});
+    const com=meses.filter(m=>!m.semDados);let acum=0,concluiuEm=null;
+    com.forEach(m=>{acum+=m.exced;m.acum=acum;if(!concluiuEm&&acum>=it.kwh*(1-DS_TOL))concluiuEm=m.mes});
+    const pct=acum/it.kwh;
+    let status,tipo;
+    if(!l.length){status='UC não encontrada nas medições';tipo='nf'}
+    else if(!meses.length){status=`Sem medição após a confirmação (${rtLbl(it.mesConf)})`;tipo='nf'}
+    else if(!com.length){status='Sem dados de fatura nos meses analisados';tipo='nf'}
+    else if(pct>1+DS_TOL){status='Concluída — entrou mais que o distribuído';tipo='acima'}
+    else if(pct>=1-DS_TOL){status=`Concluída${concluiuEm?' em '+rtLbl(concluiuEm):''}`;tipo='ok'}
+    else if(pct>=0.2){status='Parcial';tipo='parcial'}
+    else {status='Não identificada';tipo='nao'}
+    const usinaMed=l.length?l[l.length-1].ufv:null;
+    const avisoUsina=it.usina&&usinaMed&&rtNrm(it.usina)!==rtNrm(usinaMed)?`Na planilha: ${it.usina}; na medição: ${usinaMed}`:null;
+    return {...it,meses,acum,pct,status,tipo,usinaMed,avisoUsina};
+  });
+  const tot=itens.reduce((s,i)=>s+i.kwh,0),conf=itens.filter(i=>i.tipo==='ok'||i.tipo==='acima').reduce((s,i)=>s+i.kwh,0);
+  return {itens,ruidoMed,ruidoP90,nRuido:ruido.length,tot,conf};
+}
+// ── Interface ──
+function dsInitDrop(){
+  [['dsDropLista','dsFileLista',f=>dsArquivoLista(f[0])],['dsDropMed','dsFileMed',f=>dsArquivosMed([...f])]].forEach(([dz,fi,fn])=>{
+    const d=document.getElementById(dz),i=document.getElementById(fi);if(!d||d._ok)return;d._ok=true;
+    d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('drag')});d.addEventListener('dragleave',()=>d.classList.remove('drag'));
+    d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('drag');if(e.dataTransfer.files.length)fn(e.dataTransfer.files)});
+    i.addEventListener('change',()=>{if(i.files.length)fn(i.files);i.value=''});
+  });
+}
+function dsLerArquivo(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsArrayBuffer(f)})}
+async function dsArquivoLista(f){
+  try{const L=dsLerLista(XLSX.read(await dsLerArquivo(f),{type:'array',cellDates:true}));
+    if(!L){toast('Planilha não reconhecida: use o modelo de distribuição (UC, kWh distribuído, data de confirmação).','danger');return}
+    DS.lista={...L,fileName:f.name};dsRender();
+  }catch(e){console.error(e);toast('Não foi possível ler a planilha de distribuição.','danger')}
+}
+async function dsArquivosMed(fs){
+  if(!window._PARSE||!BASE_META.loaded){toast('Carregue a base Controle_GdE na aba Base de dados antes de enviar as medições.','warn');return}
+  for(const f of fs){
+    try{const m=dsLerMedicao(await dsLerArquivo(f),f.name);
+      DS.meds=DS.meds.filter(x=>x.fileName!==f.name);DS.meds.push(m)}
+    catch(e){console.error(e);DS.meds.push({erro:e.message,fileName:f.name})}
+  }
+  DS.meds.sort((a,b)=>(a.mes||'')<(b.mes||'')?-1:1);dsRender();
+}
+function dsRemoverMed(k){DS.meds.splice(k,1);dsRender()}
+function dsLimpar(){DS={lista:null,meds:[],res:null};dsRender()}
+function dsRender(){
+  const el=document.getElementById('dsResultado');if(!el)return;
+  const f0=v=>Math.round(v).toLocaleString('pt-BR'),f1=v=>(v*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
+  let h='';
+  // situação dos envios
+  const L=DS.lista;
+  h+=`<div class="rel-card" style="margin-top:1rem"><div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-files"></i></span><div><strong>Arquivos</strong></div>
+      ${L||DS.meds.length?'<button class="btn" style="margin-left:auto;padding:3px 10px;font-size:12px" onclick="dsLimpar()"><i class="ti ti-trash"></i> Limpar</button>':''}</div>
+    <p class="muted" style="font-size:13px;margin-top:.4rem">${L?`<strong>${esc(L.fileName)}</strong> · ${L.itens.length} distribuição(ões) · ${f0(L.itens.reduce((s,i)=>s+i.kwh,0))} kWh${L.erros.length?` · <span style="color:var(--red)">${L.erros.length} linha(s) ignorada(s): ${esc(L.erros.slice(0,3).join('; '))}${L.erros.length>3?'…':''}</span>`:''}`:'Planilha de distribuição ainda não enviada.'}</p>
+    ${DS.meds.length?`<div class="tbl-wrap" style="margin-top:.5rem"><table><thead><tr><th>Medição</th><th>Usina</th><th>Mês</th><th style="text-align:right">UCs</th><th></th></tr></thead><tbody>
+      ${DS.meds.map((m,k)=>`<tr><td style="font-size:12px">${esc(m.fileName)}</td>${m.erro?`<td colspan="3" style="color:var(--red)">${esc(m.erro)}</td>`:`<td>${esc(m.ufv||'?')}</td><td>${m.mes?rtLbl(m.mes):'?'}</td><td style="text-align:right">${m.ucs.length}</td>`}
+        <td style="text-align:right"><button class="btn" style="padding:1px 8px;font-size:11px" onclick="dsRemoverMed(${k})">remover</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="font-size:13px">Nenhuma medição enviada.</p>'}
+  </div>`;
+  const meds=DS.meds.filter(m=>!m.erro&&m.mes);
+  if(!L||!meds.length){el.innerHTML=h;return}
+  const R=dsAnalisar(L.itens,meds);DS.res=R;
+  const n=t=>R.itens.filter(i=>i.tipo===t).length;
+  h+=`<div class="metric-grid" style="margin-top:1rem">
+    <div class="metric"><div class="metric-label">Distribuído</div><div class="metric-val">${f0(R.tot)} kWh</div></div>
+    <div class="metric"><div class="metric-label">Confirmado</div><div class="metric-val" style="color:var(--green)">${f0(R.conf)} kWh</div><div class="metric-label" style="margin:4px 0 0">${R.tot?f1(R.conf/R.tot):'—'} do total</div></div>
+    <div class="metric"><div class="metric-label">Concluídas</div><div class="metric-val" style="color:var(--green)">${n('ok')+n('acima')}</div></div>
+    <div class="metric"><div class="metric-label">Parciais</div><div class="metric-val" style="color:var(--amber)">${n('parcial')}</div></div>
+    <div class="metric"><div class="metric-label">Não identificadas</div><div class="metric-val" style="color:var(--red)">${n('nao')}</div></div>
+    <div class="metric"><div class="metric-label">Sem medição</div><div class="metric-val">${n('nf')}</div></div></div>
+  <p class="hint">Concluída quando o excedente acumulado (créditos recebidos além do rateio) chega a ${f1(1-DS_TOL)}–${f1(1+DS_TOL)} do valor distribuído.${R.ruidoMed!=null?` Referência: nas UCs sem distribuição destas medições, a diferença entre o recebido e o rateio é de ${f0(R.ruidoMed)} kWh (mediana) e fica abaixo de ${f0(R.ruidoP90)} kWh em 90% dos casos.`:''}</p>`;
+  const cor={ok:'var(--green)',acima:'var(--amber)',parcial:'var(--amber)',nao:'var(--red)',nf:'var(--text2)'};
+  h+=`<div class="tbl-wrap" style="margin-top:.5rem"><table><thead><tr><th>Usina</th><th>UC</th><th style="text-align:right">Distribuído (kWh)</th><th>Confirmação</th><th style="text-align:right">Excedente acumulado (kWh)</th><th style="text-align:right">% do distribuído</th><th>Situação</th><th></th></tr></thead><tbody>
+  ${R.itens.map((i,k)=>`<tr><td>${esc(i.usinaMed||i.usina||'—')}${i.avisoUsina?` <i class="ti ti-alert-triangle" title="${esc(i.avisoUsina)}" style="color:var(--amber)"></i>`:''}</td>
+    <td style="font-family:var(--mono);font-size:11px">${esc(i.ucTxt)}</td><td style="text-align:right">${f0(i.kwh)}</td><td>${dsDia(i.data)}</td>
+    <td style="text-align:right">${i.meses.some(m=>!m.semDados)?f0(i.acum):'—'}</td><td style="text-align:right">${i.meses.some(m=>!m.semDados)?f1(i.pct):'—'}</td>
+    <td style="color:${cor[i.tipo]};font-weight:500">${esc(i.status)}</td>
+    <td>${i.meses.length?`<button class="btn" style="padding:1px 8px;font-size:11px" onclick="dsDetalhe(${k})">mês a mês</button>`:''}</td></tr>
+    <tr id="dsDet${k}" hidden><td colspan="8" style="background:var(--bg2)">${dsDetalheHtml(i)}</td></tr>`).join('')}</tbody></table></div>`;
+  el.innerHTML=h;
+}
+function dsDetalhe(k){const r=document.getElementById('dsDet'+k);if(r)r.hidden=!r.hidden}
+function dsDetalheHtml(i){
+  const f0=v=>v==null?'—':Math.round(v).toLocaleString('pt-BR'),fp=v=>(v*100).toLocaleString('pt-BR',{maximumFractionDigits:3})+'%';
+  return `<table style="font-size:12px"><thead><tr><th>Mês</th><th style="text-align:right">Saldo de partida</th><th style="text-align:right">Saldo final</th><th style="text-align:right">Compensado</th><th style="text-align:right">Recebido</th><th style="text-align:right">Rateio × injeção</th><th style="text-align:right">Excedente</th><th style="text-align:right">Acumulado</th><th>Observação</th></tr></thead><tbody>
+  ${i.meses.map(m=>m.semDados?`<tr><td>${rtLbl(m.mes)}</td><td colspan="7" class="muted">—</td><td class="muted">${esc(m.motivo)}</td></tr>`:
+    `<tr><td>${rtLbl(m.mes)}</td><td style="text-align:right">${f0(m.partida)}</td><td style="text-align:right">${f0(m.saldo)}</td><td style="text-align:right">${f0(m.comp)}</td><td style="text-align:right">${f0(m.recebido)}</td>
+     <td style="text-align:right" title="${fp(m.pct)} × ${f0(m.inj)} kWh">${f0(m.esperado)}</td><td style="text-align:right;font-weight:600">${m.exced>0?'+':''}${f0(m.exced)}</td><td style="text-align:right">${f0(m.acum)}</td>
+     <td class="muted">partida: ${esc(m.fonte)} · rateio ${fp(m.pct)} · injeção ${f0(m.inj)} kWh</td></tr>`).join('')}</tbody></table>`;
 }
 
 // ═════════════════════════════════════════════════════════════════════
