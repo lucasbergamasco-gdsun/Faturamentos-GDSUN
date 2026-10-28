@@ -226,7 +226,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.8 · 28/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.9 · 28/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -372,6 +372,12 @@ header{gap:1rem}
       <h1 style="font-size:22px;font-weight:500;margin-bottom:4px">Rateio</h1>
       <p style="font-size:14px;color:var(--text2)">Envie a lista de rateio de uma usina para analisar a situação atual e receber uma proposta de novo rateio, com base no histórico de geração do Controle_GdE.</p>
     </div>
+    <section class="rel-card" style="margin-bottom:1rem">
+      <div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-bolt"></i></span><div><strong>Potência por UG</strong><span class="muted"> · Controle de Projetos GDSun</span></div>
+        <label class="btn" style="margin-left:auto;cursor:pointer"><i class="ti ti-upload"></i> Enviar arquivo<input type="file" accept=".xlsx,.xls" style="display:none" onchange="if(this.files[0])prjCarregar(this.files[0]);this.value=''"></label></div>
+      <p class="muted" style="font-size:13px;margin-top:.4rem">A lista de rateio é de uma UG, mas a geração do Controle_GdE é da usina inteira. Com a potência (kWp) de cada UG, a geração é dividida pela média ponderada da potência. Fica salvo neste navegador.</p>
+      <p class="muted" style="font-size:13px;margin-top:.3rem" id="prjStatus"></p>
+    </section>
     <div class="upload-zone" id="rtDrop" onclick="document.getElementById('rtFile').click()">
       <input type="file" id="rtFile" accept=".xlsx,.xls" style="display:none">
       <i class="ti ti-chart-pie"></i>
@@ -475,7 +481,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.8 (28/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.9 (28/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
@@ -1696,7 +1702,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.8 · 28/10/26';
+const PORTAL_VERSAO='v3.9 · 28/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -1738,6 +1744,7 @@ const CAMPOS=[
   {k:'cp',lbl:'CP (compensada)',energia:true,exact:['cp','cp mwh','cp kwh','compensado','compensada','compensacao','energia compensada'],tok:['cp'],inc:['compens']},
   {k:'saldo',lbl:'Saldo (total)',energia:true,exact:['saldo','saldo mwh','saldo kwh','saldo acumulado','saldo final','saldo total'],tok:['saldo'],inc:['saldo']},
   {k:'potencia',lbl:'Potência instalada',exact:['potencia instalada kwp','potencia instalada','potencia instalada mwp','potencia kwp','potencia'],tok:['potencia'],inc:['potencia']},
+  {k:'ugs',lbl:'UGs (siglas das unidades geradoras)',exact:['ugs'],tok:[],inc:[]},
   {k:'ugnum',lbl:'Nº da UG (unidade geradora)',exact:['ug','uc geradora','unidade geradora','numero da ug'],tok:[],inc:[]},
   {k:'consumo_ug',lbl:'Consumo UG',energia:true,exact:['consumo ug','consumo da ug','consumo ug mwh','consumo ug kwh'],tok:[],inc:['consumo ug']},
   {k:'consumo',lbl:'Consumo',energia:true,exact:['consumo','consumo mwh','consumo kwh','energia consumida'],tok:['consumo'],inc:['consum']},
@@ -1834,7 +1841,7 @@ function parseControle(buf){
       ufv:String(ufv).trim(),
       mod:get(row,'modalidade')!=null?String(get(row,'modalidade')).trim():null,
       mes,gl:toNum(get(row,'gl')),ij:toNum(get(row,'ij')),cp:toNum(get(row,'cp')),
-      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),ugnum:ugNorm(get(row,'ugnum')),pot:toNum(get(row,'potencia')),
+      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),ugnum:ugNorm(get(row,'ugnum')),ugs:String(get(row,'ugs')??'').trim()||null,pot:toNum(get(row,'potencia')),
     });
   }
   // Potência: padrão kWp (como na planilha); cabeçalho em MWp é convertido
@@ -2463,7 +2470,7 @@ function painelBuild(){
 // ═════════════════════════════════════════════════════════════════════
 function goTab(t){
   if(!['validador','painel','rateio','distribuicao','relatorios','base'].includes(t))t='validador';
-  if(t==='rateio')try{rtInitDrop()}catch(e){}
+  if(t==='rateio')try{rtInitDrop();prjStatus()}catch(e){}
   if(t==='distribuicao')try{dsInitDrop()}catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t?'true':'false'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='tab-'+t);
@@ -3272,7 +3279,7 @@ function rtAdivinharUFV(wb,fileName,ufvs){
 }
 // ── Créditos esperados por mês de compensação, a partir do Controle_GdE ──
 // Autoconsumo Remoto: crédito do mês = energia injetada no mês anterior (M-1); Ger. Compartilhada: do próprio mês.
-function rtCreditos(recs,ufv,ultimoMes,n=12){
+function rtCreditos(recs,ufv,ultimoMes,n=12,peso=1){
   const rs=recs.filter(r=>r.ufv===ufv);
   const por={};rs.forEach(r=>{const o=por[r.mes]||(por[r.mes]={});['gl','ij','cp','consumo','saldo'].forEach(k=>{if(r[k]!=null)o[k]=(o[k]||0)+r[k]})});
   const ult=rs.filter(r=>r.mod&&r.mes<=ultimoMes).sort((a,b)=>a.mes<b.mes?1:-1)[0];
@@ -3290,7 +3297,7 @@ function rtCreditos(recs,ufv,ultimoMes,n=12){
     else{const ant=[1,2].map(a=>por[rtAdd(inj,-12*a)]).filter(x=>x&&x.ij>0).map(x=>x.ij);
       if(ant.length){mwh=ant.reduce((s,x)=>s+x,0)/ant.length;fonte=`Média da IJ de ${RT_MES[+inj.slice(5)-1]} em ${ant.length===2?'2 anos':'1 ano'}`}
       else{mwh=ijMedia12;fonte='Média mensal da IJ nos últimos 12 meses'}}
-    out.push({comp,inj,kwh:mwh*1000,fonte});
+    out.push({comp,inj,kwhUsina:mwh*1000,kwh:mwh*1000*peso,fonte});
   }
   // taxa mínima medida: consumo não compensado por UC (só para sugerir; o usuário pode alterar)
   const nc=meses12.map(m=>por[m]&&por[m].consumo>0&&por[m].cp!=null?por[m].consumo-por[m].cp:null).filter(v=>v!=null&&v>=0);
@@ -3319,42 +3326,32 @@ function rtIndicadores(sim,pcts,LAG){
     p10:q(fim,.1),med:q(fim,.5),p90:q(fim,.9),acima10:fim.filter(v=>v>10).length,zeros:pcts.filter(p=>p===0).length,
     saldoMeio:meio.reduce((s,v)=>s+v,0),saldoFim:hist[T-1].reduce((s,v)=>s+v,0)};
 }
-// ── Proposta GDSUN ──
-// 1) equalização: ao fim do ciclo de 12 meses (ponto baixo do saldo, após o período de menor geração), todas as UCs que
-//    recebem rateio com o mesmo número de meses de saldo; UCs com saldo de sobra ficam com zero.
-// 2) segurança: menor ajuste para que nenhuma UC fique sem crédito depois que a nova lista valer (a partir do mês LAG).
-// 3) arredondamento em 2 casas com soma exata de 100%.
-function rtPropor(ucs,G,TM,LAG){
-  const n=ucs.length,T=G.length,dbar=ucs.map(u=>Math.max(0,rtMediana(u.cons)-TM));
+// ── Proposta GDSUN — em etapas que viram fórmulas na planilha exportada (mesmo resultado na tela e no Excel) ──
+// 1) d = MAX(0; mediana do consumo − taxa mínima)            2) base = saldo + rateio atual × créditos até a lista valer − 12·d
+// 3) m = (Σ base + créditos da nova lista) ÷ Σ d, só UCs ativas; sai quem tem m·d ≤ base; repete (8 rodadas)
+// 4) p = (m·d − base) ÷ créditos da nova lista               5) segurança: rateio mínimo p/ o saldo não ficar negativo em nenhum mês
+// 6) arredonda em 2 casas; a diferença para 100% vai para a maior UC
+function rtPropor(ucs,G,TM,LAG,RODADAS=8){
+  const n=ucs.length,T=G.length,med=ucs.map(u=>rtMediana(u.cons)),d=med.map(v=>Math.max(0,v-TM));
   const Gold=[],Gnew=[];let a=0,b=0;for(let t=0;t<T;t++){if(t<LAG)a+=G[t];else b+=G[t];Gold.push(a);Gnew.push(b)}
-  const base=ucs.map((u,i)=>Array.from({length:T},(_,t)=>Math.max(0,u.saldo)+u.atual/100*Gold[t]-dbar[i]*(t+1)));
-  const GN=Gnew[T-1],tl=T-1;
-  let ativo=dbar.map(d=>d>0),m=0;const p=new Array(n).fill(0);
-  for(let it=0;it<500;it++){
-    const idx=ativo.map((v,i)=>v?i:-1).filter(i=>i>=0);
-    const sd=idx.reduce((s,i)=>s+dbar[i],0);if(!sd||!GN)break;
-    m=(idx.reduce((s,i)=>s+base[i][tl],0)+GN)/sd;
-    let algum=false;idx.forEach(i=>{const q=(m*dbar[i]-base[i][tl])/GN;if(q<=0){ativo[i]=false;algum=true}else p[i]=q});
-    if(!algum){ativo.forEach((v,i)=>{if(!v)p[i]=0});break}
+  const GN=Gnew[T-1],GO=Gold[T-1];
+  const base=ucs.map((u,i)=>Math.max(0,u.saldo)+u.atual/100*GO-T*d[i]);         // saldo no fim sem a nova lista
+  let ativo=d.map(v=>v>0);const ms=[];const hist=[ativo.slice()];
+  for(let r=0;r<RODADAS;r++){
+    let sb=0,sd=0;ativo.forEach((v,i)=>{if(v){sb+=base[i];sd+=d[i]}});
+    const m=sd>0?(sb+GN)/sd:0;ms.push(m);
+    ativo=ativo.map((v,i)=>v&&m*d[i]-base[i]>0);hist.push(ativo.slice());
   }
-  // segurança: quem ficaria negativo em algum mês ≥ LAG recebe o mínimo necessário; os demais doam proporcionalmente
-  let ajustes=0;
-  for(let it=0;it<60;it++){
-    const extra=new Array(n).fill(0);let tot=0;
-    for(let i=0;i<n;i++){if(dbar[i]<=0)continue;let need=0;
-      for(let t=LAG;t<T;t++){const v=base[i][t]+p[i]*Gnew[t];if(v<0&&Gnew[t]>0)need=Math.max(need,-v/Gnew[t])}
-      if(need>1e-9){extra[i]=need*1.0001;tot+=extra[i]}}
-    if(tot<=1e-9)break;
-    const doadores=p.map((v,i)=>v>0&&extra[i]===0?i:-1).filter(i=>i>=0),sp=doadores.reduce((s,i)=>s+p[i],0);
-    if(sp<=tot)break;
-    doadores.forEach(i=>p[i]*=1-tot/sp);for(let i=0;i<n;i++)p[i]+=extra[i];ajustes+=tot;
-  }
-  // arredondamento: 2 casas, soma 100,00
-  const pct=p.map(v=>v*100),bse=pct.map(v=>Math.floor(v*100+1e-9)/100);
-  let resto=Math.round((100-bse.reduce((s,v)=>s+v,0))*100);
-  const ordem=pct.map((v,i)=>({i,f:v*100-Math.floor(v*100+1e-9)})).sort((x,y)=>y.f-x.f);
-  for(let k=0;k<resto&&k<ordem.length;k++)bse[ordem[k].i]+=0.01;
-  return {pcts:bse.map(v=>Math.round(v*100)/100),m,ajustes:ajustes*100,zerosSobra:dbar.filter((d,i)=>d>0&&p[i]===0).length,dbar};
+  const m=ms[ms.length-1],convergiu=hist[RODADAS].every((v,i)=>v===hist[RODADAS-1][i]);
+  const peq=ativo.map((v,i)=>v?(m*d[i]-base[i])/GN:0);
+  // segurança: rateio mínimo para o saldo não ficar negativo em nenhum mês após a nova lista
+  const pmin=ucs.map((u,i)=>{let mx=0;for(let t=LAG;t<T;t++){const bt=Math.max(0,u.saldo)+u.atual/100*Gold[t]-d[i]*(t+1);if(Gnew[t]>0)mx=Math.max(mx,-bt/Gnew[t])}return d[i]>0?mx:0});
+  const extra=peq.map((v,i)=>Math.max(0,pmin[i]-v)),sx=extra.reduce((s,v)=>s+v,0);
+  const doador=peq.map((v,i)=>extra[i]>0?0:v),sdoa=doador.reduce((s,v)=>s+v,0),f=sdoa>0?1-sx/sdoa:1;
+  const p=peq.map((v,i)=>extra[i]>0?pmin[i]:v*f);
+  const r2=p.map(v=>Math.round(v*100*100)/100),resid=Math.round((100-r2.reduce((s,v)=>s+v,0))*100)/100;
+  const imax=p.indexOf(Math.max(...p));const pcts=r2.map((v,i)=>i===imax?Math.round((v+resid)*100)/100:v);
+  return {pcts,m,ms,hist,convergiu,ajustes:sx*100,zerosSobra:d.filter((v,i)=>v>0&&!ativo[i]).length,dbar:d,med,base,peq,pmin,extra,f,sx,sdoa,p,r2,resid,imax,Gold,Gnew};
 }
 // Observação por UC (saldo só pode ser redistribuído de UC desativada)
 function rtObservacao(u,prop,dbar){
@@ -3367,6 +3364,57 @@ function rtObservacao(u,prop,dbar){
   return {tipo:'mantido',txt:'Mantido (ajuste fino)'};
 }
 
+// ── Potência por UG (Controle de Projetos GDSun) — pesos para dividir a geração da usina entre as UGs ──
+// A lista de rateio é por UG, mas a GL do Controle_GdE é da usina inteira (todas as UGs).
+// Crédito da UG = crédito da usina × kWp da UG ÷ kWp de todas as UGs da usina (média ponderada pela potência).
+const PRJ_KEY='gdsun.projetos.v1';
+let PRJ=(()=>{try{return JSON.parse(localStorage.getItem(PRJ_KEY)||'null')}catch(e){return null}})();
+function prjLer(wb,fileName){
+  for(const sn of wb.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
+    for(let h=0;h<Math.min(rows.length,15);h++){
+      const cab=rows[h].map(rtNrm);
+      const cS=cab.indexOf('sigla'),cU=cab.indexOf('usina'),cP=cab.findIndex(x=>x==='kwp');
+      if(cS<0||cU<0||cP<0)continue;
+      // só o que compõe a usina: sigla da UG e potência (kWp) — as linhas de UG são as que têm potência
+      const ugs=[];
+      for(let r=h+1;r<rows.length;r++){const x=rows[r];const sig=String(x[cS]??'').trim(),kwp=rtNum(x[cP]);
+        if(!sig||!(kwp>0))continue;
+        ugs.push({sigla:sig,usina:String(x[cU]).trim(),kWp:kwp});
+      }
+      if(ugs.length)return {fileName,aba:sn,data:new Date().toISOString(),ugs};
+    }
+  }
+  return null;
+}
+function prjCarregar(f){
+  const r=new FileReader();
+  r.onload=e=>{try{const P=prjLer(XLSX.read(e.target.result,{type:'array'}),f.name);
+    if(!P){toast('Não encontrei a aba com Sigla, Usina e kWp.','danger');return}
+    PRJ=P;try{localStorage.setItem(PRJ_KEY,JSON.stringify(PRJ))}catch(err){}
+    toast(`Controle de Projetos carregado: ${P.ugs.length} UGs.`,'ok');prjStatus();if(RT&&RT.L)rtRender(true)}
+    catch(err){console.error(err);toast('Não foi possível ler o Controle de Projetos.','danger')}};
+  r.readAsArrayBuffer(f);
+}
+function prjStatus(){const el=document.getElementById('prjStatus');if(!el)return;
+  el.innerHTML=PRJ?`<strong>${esc(PRJ.fileName)}</strong> · ${PRJ.ugs.length} UGs · carregado em ${new Date(PRJ.data).toLocaleDateString('pt-BR')}`:'Ainda não carregado — sem ele, a geração da usina é considerada inteira para a lista (adequado só para usinas de uma UG).'}
+// UGs de uma UFV do Controle_GdE (coluna "UGs", ex.: "MDR1/MDR2/MDR3/MDR4") com potência e peso
+function prjUGsDaUFV(ufv,ref){
+  const r=(window._PARSE?.recs||[]).filter(x=>x.ufv===ufv&&x.ugs&&x.mes<=ref).sort((a,b)=>a.mes<b.mes?1:-1)[0];
+  const sig=r?r.ugs.split('/').map(s=>s.trim()).filter(Boolean):[];
+  const lista=sig.map(s=>{const p=PRJ&&PRJ.ugs.find(x=>x.sigla===s);return {sigla:s,kWp:p?p.kWp:null,usina:p?p.usina:null}});
+  const tot=lista.reduce((s,x)=>s+(x.kWp||0),0),completo=lista.length&&lista.every(x=>x.kWp>0);
+  lista.forEach(x=>x.peso=completo?x.kWp/tot:(lista.length?1/lista.length:1));
+  return {ugs:lista,completo,totKWp:tot};
+}
+// UG da lista pelo nome do arquivo (ex.: "MDR2", "UFV 2", "UG2")
+function prjAdivinharUG(info,fileName,wb){
+  if(info.ugs.length<=1)return info.ugs.length?info.ugs[0].sigla:null;
+  const nm=rtNrm(fileName).replace(/[_\-]+/g,' ');
+  for(const u of info.ugs){if(new RegExp('(^|[^a-z0-9])'+u.sigla.toLowerCase()+'($|[^0-9])').test(nm))return u.sigla}
+  const k=nm.match(/(?:ufv|ug)\s*0?(\d)\b/);if(k){const u=info.ugs.find(x=>x.sigla.endsWith(k[1]));if(u)return u.sigla}
+  return null;
+}
 
 // ── Interface da aba Rateio ──
 let RT=null; // {buf,wb,fileName,L,ufv,C,res,...}
@@ -3389,11 +3437,12 @@ function rtCarregar(buf,fileName){
   const L=rtLer(wb,fileName);
   if(!L){rtErro('Não encontrei as colunas de instalação, meses de consumo, RATEIO ATUAL e SALDO FINAL.');return}
   const ufvs=[...new Set(window._PARSE.recs.map(r=>r.ufv).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  RT={buf,wb,fileName,L,ufvs,ufv:rtAdivinharUFV(wb,fileName,ufvs),TM:null,LAG:2};
+  RT={buf,wb,fileName,L,ufvs,ufv:rtAdivinharUFV(wb,fileName,ufvs),TM:null,LAG:2,ugSel:undefined};
   rtRender();
 }
 function rtParam(){
-  RT.ufv=document.getElementById('rtUfv').value||null;
+  const novaUfv=document.getElementById('rtUfv').value||null;if(novaUfv!==RT.ufv){RT.ufv=novaUfv;RT.ugSel=undefined}
+  const ugEl=document.getElementById('rtUG');if(ugEl&&RT.ugSel!==undefined)RT.ugSel=ugEl.value;
   const tm=rtNum(document.getElementById('rtTM').value),lag=rtNum(document.getElementById('rtLag').value);
   RT.TM=tm!=null&&tm>=0?tm:100;RT.LAG=lag!=null&&lag>=0&&lag<=6?Math.round(lag):2;
   rtRender(true);
@@ -3403,7 +3452,12 @@ function rtRender(manterParam){
   const {L}=RT,ult=L.meses[L.meses.length-1];
   const opts=['<option value="">— escolha a usina —</option>',...RT.ufvs.map(u=>`<option value="${esc(u)}"${u===RT.ufv?' selected':''}>${esc(u)}</option>`)].join('');
   let C=null,G=null;
-  if(RT.ufv){C=rtCreditos(window._PARSE.recs,RT.ufv,ult);G=C.creditos.map(c=>c.kwh);
+  let UG=null,peso=1;
+  if(RT.ufv){
+    UG=prjUGsDaUFV(RT.ufv,ult);RT.UG=UG;
+    if(RT.ugSel===undefined)RT.ugSel=prjAdivinharUG(UG,RT.fileName,RT.wb)||(UG.ugs.length>1?'':'todas');
+    const sel=UG.ugs.find(x=>x.sigla===RT.ugSel);peso=sel?sel.peso:1;RT.peso=peso;RT.ugInfo=sel||null;
+    C=rtCreditos(window._PARSE.recs,RT.ufv,ult,12,peso);G=C.creditos.map(c=>c.kwh);
     if(!manterParam||RT.TM==null){const med=C.naoComp!=null?C.naoComp/L.ucs.length:null;RT.TM=med!=null&&med>=30&&med<=300?Math.round(med/10)*10:100;RT.tmMedido=med}}
   const f0=v=>Math.round(v).toLocaleString('pt-BR'),f1=v=>v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}),f2=v=>v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const somaAt=L.ucs.reduce((s,u)=>s+u.atual,0),saldo=L.ucs.reduce((s,u)=>s+u.saldo,0),consUlt=L.ucs.reduce((s,u)=>s+u.cons[u.cons.length-1],0);
@@ -3417,12 +3471,24 @@ function rtRender(manterParam){
       <button class="btn btn-primary" id="rtExp" onclick="rtExportar()"${RT.ufv?'':' disabled'}><i class="ti ti-download"></i> Exportar planilha com a proposta</button>
     </div>`;
   if(!RT.ufv){h+=`<p class="hint" style="margin-top:.75rem">Não identifiquei a usina pelo nome do arquivo. Escolha a usina para buscar o histórico de geração no Controle_GdE.</p></div>`;el.innerHTML=h;return}
+  // UGs da usina: a lista de rateio é de uma UG; a geração do Controle é da usina inteira → crédito da UG = usina × peso (kWp)
+  const fK=v=>v==null?'—':v.toLocaleString('pt-BR',{maximumFractionDigits:1});
+  const optUG=[UG.ugs.length>1?`<option value=""${RT.ugSel===''?' selected':''}>— escolha a UG da lista —</option>`:'',
+    ...UG.ugs.map(u=>`<option value="${esc(u.sigla)}"${u.sigla===RT.ugSel?' selected':''}>${esc(u.sigla)} · ${fK(u.kWp)} kWp · ${f1(u.peso*100)}%</option>`),
+    UG.ugs.length>1?`<option value="todas"${RT.ugSel==='todas'?' selected':''}>Usina inteira (todas as UGs) · 100%</option>`:''].join('');
+  h+=`<div class="src-actions" style="margin-top:.5rem"><label class="muted" style="display:flex;align-items:center;gap:8px">UG da lista <select id="rtUG" class="map-sel" style="width:auto" onchange="RT.ugSel=this.value;rtParam()">${optUG}</select></label>
+    <span class="muted" style="font-size:12px">${UG.ugs.length>1?(UG.completo?`Potência das UGs do Controle de Projetos (${fK(UG.totKWp)} kWp na usina)`:'Potência das UGs não encontrada no Controle de Projetos — pesos iguais entre as UGs'):'Usina com uma UG — a geração inteira é da lista'}</span></div>`;
+  if(UG.ugs.length>1)h+=`<div class="tbl-wrap" style="margin-top:.5rem"><table><thead><tr><th>UG</th><th style="text-align:right">Potência (kWp)</th><th style="text-align:right">Peso</th><th style="text-align:right">Créditos em 12 meses (MWh)</th></tr></thead><tbody>
+    ${UG.ugs.map(u=>{const c=rtCreditos(window._PARSE.recs,RT.ufv,ult,12,u.peso).creditos.reduce((s,x)=>s+x.kwh,0);return `<tr${u.sigla===RT.ugSel?' style="font-weight:600"':''}><td>${esc(u.sigla)}</td><td style="text-align:right">${fK(u.kWp)}</td><td style="text-align:right">${f1(u.peso*100)}%</td><td style="text-align:right">${f1(c/1000)}</td></tr>`}).join('')}
+    </tbody></table></div>`;
+  if(UG.ugs.length>1&&RT.ugSel===''){h+=`<p class="hint" style="margin-top:.75rem">A usina tem ${UG.ugs.length} UGs e não identifiquei de qual é a lista pelo nome do arquivo. Escolha a UG para dividir a geração pelo peso dela.</p></div>`;el.innerHTML=h;return}
   // conferências com a base
   const avisos=[];
-  if(C.saldoBase!=null&&C.saldoBase>0&&Math.abs(saldo-C.saldoBase)/C.saldoBase>0.02)avisos.push(`Saldo da lista (${f1(saldo/1000)} MWh) difere do Controle em ${rtLbl(ult)} (${f1(C.saldoBase/1000)} MWh).`);
-  if(C.consBase!=null&&C.consBase>0&&Math.abs(consUlt-C.consBase)/C.consBase>0.02)avisos.push(`Consumo de ${rtLbl(ult)} na lista (${f1(consUlt/1000)} MWh) difere do Controle (${f1(C.consBase/1000)} MWh) — confira se a usina está certa.`);
+  const listaUsina=!RT.ugInfo||UG.ugs.length===1;
+  if(listaUsina&&C.saldoBase!=null&&C.saldoBase>0&&Math.abs(saldo-C.saldoBase)/C.saldoBase>0.02)avisos.push(`Saldo da lista (${f1(saldo/1000)} MWh) difere do Controle em ${rtLbl(ult)} (${f1(C.saldoBase/1000)} MWh).`);
+  if(listaUsina&&C.consBase!=null&&C.consBase>0&&Math.abs(consUlt-C.consBase)/C.consBase>0.02)avisos.push(`Consumo de ${rtLbl(ult)} na lista (${f1(consUlt/1000)} MWh) difere do Controle (${f1(C.consBase/1000)} MWh) — confira se a usina está certa.`);
   if(Math.abs(somaAt-100)>0.05)avisos.push(`O rateio atual soma ${f2(somaAt)}%, não 100%.`);
-  h+=`<p class="muted" style="margin-top:.6rem;font-size:13px">${esc(C.cliente||'')} · ${esc(C.mod||'')} · créditos ${C.gc?'do próprio mês (Geração Compartilhada)':'da injeção do mês anterior (M-1)'}${RT.tmMedido!=null?` · consumo não compensado medido na base: ${f0(RT.tmMedido)} kWh/UC/mês`:''}</p>`;
+  h+=`<p class="muted" style="margin-top:.6rem;font-size:13px">${esc(C.cliente||'')} · ${esc(C.mod||'')} · créditos ${C.gc?'do próprio mês (Geração Compartilhada)':'da injeção do mês anterior (M-1)'}${RT.ugInfo&&UG.ugs.length>1?` · lista da UG ${esc(RT.ugInfo.sigla)}: ${f1(RT.peso*100)}% da geração da usina`:''}${RT.tmMedido!=null?` · consumo não compensado medido na base: ${f0(RT.tmMedido)} kWh/UC/mês`:''}</p>`;
   if(avisos.length)h+=`<div class="ck ck-warn" style="margin-top:.5rem">${avisos.map(esc).join('<br>')}</div>`;
   h+=`</div>`;
   // cálculo
@@ -3445,9 +3511,10 @@ function rtRender(manterParam){
     ${linha('UCs com rateio zero',x=>x.zeros,f0)}
     ${linha(`Saldo total em ${fim} (MWh)`,x=>x.saldoFim/1000,f1)}
     </tbody></table></div>
-    <p class="hint" style="margin-top:.6rem">Proposta: ao fim do ciclo de 12 meses, todas as UCs que recebem rateio com o mesmo fôlego (${f1(P.m)} meses de saldo); UCs com saldo de sobra ficam com rateio zero até consumi-lo (${P.zerosSobra}); ajuste mínimo para nenhuma UC ficar sem crédito depois que a nova lista valer (${f2(P.ajustes)} p.p.). Saldo só pode ser redistribuído de UC desativada, então o rateio é a única ferramenta para evitar acúmulo.</p>
-    <details class="com-det"><summary>Créditos esperados por mês</summary><div class="tbl-wrap"><table><thead><tr><th>Mês da compensação</th><th style="text-align:right">Créditos (MWh)</th><th>Lista que vale</th><th>Fonte</th></tr></thead><tbody>
-    ${C.creditos.map((c,k)=>`<tr><td>${rtLbl(c.comp)}</td><td style="text-align:right">${f1(c.kwh/1000)}</td><td>${k<RT.LAG?'atual':'proposta'}</td><td class="muted">${esc(c.fonte)}</td></tr>`).join('')}
+    ${P.m<0?`<div class="ck ck-danger" style="margin-top:.6rem"><strong>Os créditos previstos${RT.ugInfo&&RT.UG.ugs.length>1?' desta UG':''} não cobrem o consumo das UCs da lista no ciclo.</strong> O saldo total se esgota de qualquer forma (meses de saldo-alvo ${f1(P.m)}); a proposta apenas divide o déficit por igual. Avalie retirar UCs da lista${RT.ugInfo&&RT.UG.ugs.length>1?' ou conferir se a UG escolhida está certa':''}.</div>`:''}
+    <p class="hint" style="margin-top:.6rem">${P.convergiu?'':'<strong style="color:var(--amber)">A equalização não convergiu em 8 rodadas — confira a aba de cálculo.</strong> '}Proposta: ao fim do ciclo de 12 meses, todas as UCs que recebem rateio com o mesmo fôlego (${f1(P.m)} meses de saldo); UCs com saldo de sobra ficam com rateio zero até consumi-lo (${P.zerosSobra}); ajuste mínimo para nenhuma UC ficar sem crédito depois que a nova lista valer (${f2(P.ajustes)} p.p.). Saldo só pode ser redistribuído de UC desativada, então o rateio é a única ferramenta para evitar acúmulo.</p>
+    <details class="com-det"><summary>Créditos esperados por mês</summary><div class="tbl-wrap"><table><thead><tr><th>Mês da compensação</th><th style="text-align:right">Usina (MWh)</th><th style="text-align:right">Peso da UG</th><th style="text-align:right">Créditos da lista (MWh)</th><th>Lista que vale</th><th>Fonte</th></tr></thead><tbody>
+    ${C.creditos.map((c,k)=>`<tr><td>${rtLbl(c.comp)}</td><td style="text-align:right">${f1(c.kwhUsina/1000)}</td><td style="text-align:right">${f1(RT.peso*100)}%</td><td style="text-align:right">${f1(c.kwh/1000)}</td><td>${k<RT.LAG?'atual':'proposta'}</td><td class="muted">${esc(c.fonte)}</td></tr>`).join('')}
     </tbody></table></div></details></div>`;
   // tabela por UC
   const simP=rtSimular(L.ucs,P.pcts,G,RT.TM,RT.LAG),fimS=simP.hist[simP.hist.length-1];
@@ -3475,76 +3542,152 @@ function rtTabela(){
     <td style="font-size:12px;color:${cor(l)}">${esc(l.obs.txt)}</td></tr>`).join('')}</tbody></table>`;
   document.querySelectorAll('#rtFiltros .btn').forEach(b=>b.classList.toggle('btn-primary',b.getAttribute('onclick').includes(`'${RT.filtro}'`)));
 }
-// ── Exportação: planilha original + colunas da proposta ao lado + aba "Proposta GDSUN" ──
+// ── Exportação com as equações abertas ──
+// Abas: Rateios (lista original + proposta puxada por fórmula) · Proposta GDSUN (premissas, peso da UG, créditos)
+//       Cálculo do rateio (cada etapa numa coluna) · Simulação (saldo mês a mês, atual e proposto)
 async function rtExportar(opts={}){
   if(!RT||!RT.P)return;
   const bt=document.getElementById('rtExp');if(bt)bt.disabled=true;
   try{
     const ExcelJS=await anaCarregarLib();
     const wb=new ExcelJS.Workbook();await wb.xlsx.load(RT.buf);
-    const ws=wb.getWorksheet(RT.L.sheet);const L=RT.L,P=RT.P,C=RT.C;
-    const colL=n=>{let s='';n++;while(n){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s};
-    const h=L.headerRow+1,c0=L.ultimaCol+1;const L_=k=>colL(c0+k);
+    const ws=wb.getWorksheet(RT.L.sheet);const L=RT.L,P=RT.P,C=RT.C,T=12,n=L.ucs.length;
+    const colL=k=>{let s='';k++;while(k){const m=(k-1)%26;s=String.fromCharCode(65+m)+s;k=Math.floor((k-1)/26)}return s};
+    const h=L.headerRow+1,c0=L.ultimaCol+1,LC=k=>colL(c0+k);
     const cIni=colL(Math.min(...L.cols.meses)),cFim=colL(Math.max(...L.cols.meses)),cSal=colL(L.cols.saldo),cAt=colL(L.cols.atual);
-    const somaOrig=L.ucs.reduce((s,u)=>s+(rtNum(ws.getRow(u.linha+1).getCell(L.cols.atual+1).value)||0),0),divAt=somaOrig>0&&somaOrig<1.5?1:100;
-    const PS="'Proposta GDSUN'";
-    const cab=['RATEIO PROPOSTO GDSUN','DIFERENÇA vs ATUAL (p.p.)','CONSUMO COMPENSÁVEL (kWh/mês)','MESES DE SALDO HOJE',`SALDO PREVISTO ${rtLbl(rtAdd(L.meses[L.meses.length-1],12)).toUpperCase()} - ATUAL`,`SALDO PREVISTO ${rtLbl(rtAdd(L.meses[L.meses.length-1],12)).toUpperCase()} - PROPOSTO`,`MESES DE SALDO ${rtLbl(rtAdd(L.meses[L.meses.length-1],12)).toUpperCase()} - PROPOSTO`,'OBSERVAÇÃO'];
-    const azul={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDEBF7'}};
+    const somaOrig=L.ucs.reduce((s,u)=>s+(rtNum(ws.getRow(u.linha+1).getCell(L.cols.atual+1).value)||0),0),divAt=somaOrig>0&&somaOrig<1.5?0.01:1; // rateio atual em % na conta
+    const azul={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDEBF7'}},cinza={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};
+    const PS="'Proposta GDSUN'",CS="'Cálculo do rateio'",SS="'Simulação'",RS=`'${ws.name.replace(/'/g,"''")}'`;
+    const ult=L.meses[L.meses.length-1],fimLbl=rtLbl(rtAdd(ult,T)).toUpperCase();
+    ['Proposta GDSUN','Cálculo do rateio','Simulação'].forEach(nm=>{const o=wb.getWorksheet(nm);if(o)wb.removeWorksheet(o.id)});
+    const Ps=wb.addWorksheet('Proposta GDSUN'),Cs=wb.addWorksheet('Cálculo do rateio'),Ss=wb.addWorksheet('Simulação');
+    const put=(sh,a,v,o={})=>{const c=sh.getCell(a);c.value=v;if(o.b||o.sz||o.i||o.cor)c.font={bold:!!o.b,size:o.sz||11,italic:!!o.i,color:o.cor?{argb:o.cor}:undefined};if(o.fmt)c.numFmt=o.fmt;if(o.fill)c.fill=o.fill===2?cinza:azul;if(o.wrap)c.alignment={wrapText:true,vertical:'top'};return c};
+    const fx=(f,r)=>({formula:f,result:r});
+    // ── Proposta GDSUN: premissas ──
+    [['A',3],['B',58],['C',16],['D',14],['E',16],['F',16],['G',16],['H',50]].forEach(([c,w])=>Ps.getColumn(c).width=w);
+    put(Ps,'B2',`Proposta de rateio GDSUN — ${RT.ufv}${RT.ugInfo&&RT.UG.ugs.length>1?' · UG '+RT.ugInfo.sigla:''}`,{b:true,sz:14});
+    put(Ps,'B3',`${C.cliente||''} · ${C.mod||''} · consumos de ${rtLbl(L.meses[0])} a ${rtLbl(ult)} e saldo final de ${rtLbl(ult)} · arquivo ${RT.fileName}`,{i:true,cor:'FF595959'});
+    put(Ps,'B5','Premissas (células em azul podem ser alteradas — todo o cálculo se refaz)',{b:true});
+    put(Ps,'B6','Taxa mínima não compensável por UC (kWh/mês)');put(Ps,'C6',RT.TM,{fill:1});
+    put(Ps,'H6',RT.tmMedido!=null?`Medido no Controle_GdE: ~${Math.round(RT.tmMedido)} kWh/UC/mês sem compensação.`:'Custo de disponibilidade.',{i:true,cor:'FF595959',sz:9,wrap:true});
+    put(Ps,'B7','Meses até a nova lista valer');put(Ps,'C7',RT.LAG,{fill:1});
+    const ugs=RT.UG?RT.UG.ugs:[],sel=RT.ugInfo;
+    put(Ps,'B8',`kWp da UG da lista${sel?' ('+sel.sigla+')':''}`);put(Ps,'C8',sel&&sel.kWp?sel.kWp:1,{fill:1,fmt:'#,##0.0'});
+    put(Ps,'B9','kWp de todas as UGs da usina');put(Ps,'C9',sel&&RT.UG.completo?RT.UG.totKWp:1,{fill:1,fmt:'#,##0.0'});
+    put(Ps,'B10','Peso da UG na geração da usina = C8 ÷ C9',{b:true});put(Ps,'C10',fx('C8/C9',RT.peso),{fmt:'0.00%'});
+    put(Ps,'H8',ugs.length>1?`UGs da usina (Controle de Projetos): ${ugs.map(u=>`${u.sigla} ${Math.round(u.kWp||0)} kWp`).join(' · ')}`:'Usina com uma UG.',{i:true,cor:'FF595959',sz:9,wrap:true});
+    put(Ps,'B12',`Créditos por mês de compensação (${C.gc?'energia injetada no próprio mês':'energia injetada no mês anterior, M-1'}) — usina × peso da UG`,{b:true});
+    ['Mês','Usina (MWh)','Peso da UG','Créditos da lista (kWh)','Lista que vale','Acum. lista atual (kWh)','Acum. nova lista (kWh)'].forEach((t,k)=>put(Ps,`${'BCDEFGH'[k]}13`,t,{b:true}));
+    const r0c=14;let ao=0,an=0;
+    C.creditos.forEach((c,k)=>{const r=r0c+k,at=k<RT.LAG;if(at)ao+=c.kwh;else an+=c.kwh;
+      put(Ps,`B${r}`,rtLbl(c.comp));put(Ps,`C${r}`,Math.round(c.kwhUsina/100)/10,{fmt:'#,##0.0',fill:1});
+      put(Ps,`D${r}`,fx('$C$10',RT.peso),{fmt:'0.00%'});put(Ps,`E${r}`,fx(`C${r}*1000*D${r}`,c.kwh),{fmt:'#,##0'});
+      put(Ps,`F${r}`,fx(`IF(ROW()-${r0c-1}<=$C$7,"atual","nova")`,at?'atual':'nova'));
+      put(Ps,`G${r}`,fx(`SUMIF($F$${r0c}:F${r},"atual",$E$${r0c}:E${r})`,ao),{fmt:'#,##0'});put(Ps,`H${r}`,fx(`SUMIF($F$${r0c}:F${r},"nova",$E$${r0c}:E${r})`,an),{fmt:'#,##0'});
+    });
+    const rl=r0c+T-1;
+    put(Ps,'B27','Créditos com a lista atual — Gatual (kWh)');put(Ps,'C27',fx(`G${rl}`,P.Gold[T-1]),{fmt:'#,##0',b:true});
+    put(Ps,'B28','Créditos com a nova lista — Gnova (kWh)');put(Ps,'C28',fx(`H${rl}`,P.Gnew[T-1]),{fmt:'#,##0',b:true});
+    // comparação (valores da simulação do portal)
+    put(Ps,'B30',`Comparação dos cenários — ${rtLbl(rtAdd(ult,1))} a ${rtLbl(rtAdd(ult,T))} (calculada no portal)`,{b:true});
+    put(Ps,'B31','Indicador',{b:true});RT.I.forEach(([nm],k)=>put(Ps,`${'CDE'[k]}31`,nm,{b:true}));
+    [['Energia não compensada depois que a nova lista vale (MWh)',x=>x.naoCompDepois/1000,'#,##0.0'],['Energia não compensada antes da nova lista valer (MWh)',x=>x.naoCompAntes/1000,'#,##0.0'],
+     ['Menor saldo de qualquer UC depois que a nova lista vale (meses)',x=>x.pisoMin,'0.00'],['UCs com menos de 1 mês de saldo em algum momento',x=>x.abaixo1,'0'],
+     ['UCs com menos de 2 meses de saldo em algum momento',x=>x.abaixo2,'0'],['Meses de saldo no fim — 10% das UCs abaixo de',x=>x.p10,'0.0'],
+     ['Meses de saldo no fim — mediana',x=>x.med,'0.0'],['Meses de saldo no fim — 90% das UCs abaixo de',x=>x.p90,'0.0'],['UCs com rateio zero',x=>x.zeros,'0']
+    ].forEach(([t,fn,fmt],k)=>{const r=32+k;put(Ps,`B${r}`,t);RT.I.forEach(([,x],j)=>put(Ps,`${'CDE'[j]}${r}`,Math.round(fn(x)*100)/100,{fmt}))});
+    // ── Cálculo do rateio: cada etapa numa coluna ──
+    const R0=16,RL=R0+n-1;
+    const cabC=['Instalação','Consumo mediano (kWh)','d = consumo compensável','Saldo hoje (kWh)','Rateio atual (%)','base = saldo no fim sem a nova lista'];
+    for(let r=1;r<=8;r++)cabC.push(`Ativa na rodada ${r}`);
+    cabC.push('p_eq = rateio equalizado','p_min = mínimo p/ não zerar','extra = MAX(0; p_min − p_eq)','doador = p_eq se extra = 0','p = rateio com segurança','Arredondado (%)','RATEIO PROPOSTO (%)');
+    for(let t=1;t<=T;t++)cabC.push(`p mín. no mês ${t}`);
+    const CC=k=>colL(k);
+    put(Cs,'A1','Cálculo do rateio proposto — passo a passo',{b:true,sz:14});
+    const passos=['1) d = MAX(0; mediana do consumo − taxa mínima): consumo que de fato usa crédito.',
+      '2) base = saldo hoje + rateio atual × Gatual − 12 × d: saldo que a UC teria no fim do ciclo se não recebesse nada da nova lista.',
+      '3) Equalização: m = (Σ base + Gnova) ÷ Σ d, só com UCs ativas; fica ativa a UC com m·d − base > 0. Repete por 8 rodadas até estabilizar (linha 12).',
+      '4) p_eq = (m·d − base) ÷ Gnova: rateio para todas terminarem com m meses de saldo; UCs com saldo de sobra ficam com zero.',
+      '5) Segurança: p mín. no mês t = MAX(0; −(saldo + rateio atual × Gatual(t) − d·t) ÷ Gnova(t)); p_min é o maior deles. Quem precisa recebe p_min; os doadores cedem na proporção f.',
+      '6) Arredonda em 2 casas; a diferença para 100% vai para a UC de maior rateio.'];
+    passos.forEach((t,k)=>{const c=put(Cs,`A${2+k}`,t,{wrap:true});Cs.mergeCells(`A${2+k}:P${2+k}`);Cs.getRow(2+k).height=28});
+    put(Cs,'A9','Gnova (kWh)',{b:true});put(Cs,'B9',fx(`${PS}!C28`,P.Gnew[T-1]),{fmt:'#,##0'});
+    put(Cs,'A10','Gatual (kWh)',{b:true});put(Cs,'B10',fx(`${PS}!C27`,P.Gold[T-1]),{fmt:'#,##0'});
+    put(Cs,'A11','m — meses de saldo-alvo por rodada',{b:true});
+    put(Cs,'A12','Equalização estabilizou?',{b:true});
+    put(Cs,'A13','f = 1 − Σ extra ÷ Σ doador',{b:true});put(Cs,'A14','Diferença para 100% (vai para a maior UC)',{b:true});
+    cabC.forEach((t,k)=>{const c=put(Cs,`${CC(k)}${R0-1}`,t,{b:true,wrap:true,fill:k>=6&&k<14?2:1});Cs.getColumn(k+1).width=k===0?16:12});
+    Cs.getRow(R0-1).height=48;
+    const ativoCol=r=>CC(5+r);       // G..N
+    const cPEQ=CC(14),cPMIN=CC(15),cEX=CC(16),cDO=CC(17),cP=CC(18),cAR=CC(19),cFIN=CC(20),cMes=t=>CC(20+t);
+    // m por rodada (B11..I11)
+    for(let r=1;r<=8;r++){
+      const prev=r===1?`$C$${R0}:$C$${RL},">0"`:`$${ativoCol(r-1)}$${R0}:$${ativoCol(r-1)}$${RL},1`;
+      const sb=r===1?`SUMIF($C$${R0}:$C$${RL},">0",$F$${R0}:$F$${RL})`:`SUMIF($${ativoCol(r-1)}$${R0}:$${ativoCol(r-1)}$${RL},1,$F$${R0}:$F$${RL})`;
+      const sd=r===1?`SUMIF($C$${R0}:$C$${RL},">0",$C$${R0}:$C$${RL})`:`SUMIF($${ativoCol(r-1)}$${R0}:$${ativoCol(r-1)}$${RL},1,$C$${R0}:$C$${RL})`;
+      put(Cs,`${CC(r)}11`,fx(`IFERROR((${sb}+$B$9)/${sd},0)`,P.ms[r-1]),{fmt:'0.000'});
+    }
+    put(Cs,'B12',fx(`IF(SUMPRODUCT(--($${ativoCol(8)}$${R0}:$${ativoCol(8)}$${RL}<>$${ativoCol(7)}$${R0}:$${ativoCol(7)}$${RL}))=0,"sim","não — confira")`,P.convergiu?'sim':'não — confira'));
+    put(Cs,'B13',fx(`IFERROR(1-SUM($${cEX}$${R0}:$${cEX}$${RL})/SUM($${cDO}$${R0}:$${cDO}$${RL}),1)`,P.f),{fmt:'0.0000'});
+    put(Cs,'B14',fx(`100-SUM($${cAR}$${R0}:$${cAR}$${RL})`,P.resid),{fmt:'0.00'});
+    L.ucs.forEach((u,i)=>{
+      const r=R0+i,rr=u.linha+1;
+      const set=(col,v,fmt)=>{const c=Cs.getCell(`${col}${r}`);c.value=v;if(fmt)c.numFmt=fmt};
+      set('A',fx(`${RS}!A${rr}`,u.inst));
+      set('B',fx(`MEDIAN(${RS}!${cIni}${rr}:${cFim}${rr})`,P.med[i]),'#,##0');
+      set('C',fx(`MAX(0,B${r}-${PS}!$C$6)`,P.dbar[i]),'#,##0');
+      set('D',fx(`MAX(0,${RS}!${cSal}${rr})`,Math.max(0,u.saldo)),'#,##0');
+      set('E',fx(`${RS}!${cAt}${rr}${divAt===0.01?'*100':''}`,u.atual),'0.00');
+      set('F',fx(`D${r}+E${r}/100*$B$10-${T}*C${r}`,P.base[i]),'#,##0');
+      for(let k=1;k<=8;k++){const m=`${CC(k)}$11`,prev=k===1?`C${r}>0`:`${ativoCol(k-1)}${r}=1`;
+        set(ativoCol(k),fx(`IF(AND(${prev},${m}*C${r}-F${r}>0),1,0)`,P.hist[k][i]?1:0))}
+      set(cPEQ,fx(`IF(${ativoCol(8)}${r}=1,(${CC(8)}$11*C${r}-F${r})/$B$9,0)`,P.peq[i]),'0.000000');
+      for(let t=1;t<=T;t++){const g=`${PS}!$G$${r0c+t-1}`,gn=`${PS}!$H$${r0c+t-1}`;
+        const bt=Math.max(0,u.saldo)+u.atual/100*P.Gold[t-1]-P.dbar[i]*t,res=P.Gnew[t-1]>0?Math.max(0,-bt/P.Gnew[t-1]):0;
+        set(cMes(t),fx(`IF(${gn}>0,MAX(0,-(D${r}+E${r}/100*${g}-C${r}*${t})/${gn}),0)`,res),'0.000000')}
+      set(cPMIN,fx(`IF(C${r}>0,MAX(${cMes(1)}${r}:${cMes(T)}${r}),0)`,P.pmin[i]),'0.000000');
+      set(cEX,fx(`MAX(0,${cPMIN}${r}-${cPEQ}${r})`,P.extra[i]),'0.000000');
+      set(cDO,fx(`IF(${cEX}${r}>0,0,${cPEQ}${r})`,P.extra[i]>0?0:P.peq[i]),'0.000000');
+      set(cP,fx(`IF(${cEX}${r}>0,${cPMIN}${r},${cPEQ}${r}*$B$13)`,P.p[i]),'0.000000');
+      set(cAR,fx(`ROUND(${cP}${r}*100,2)`,P.r2[i]),'0.00');
+      set(cFIN,fx(`${cAR}${r}+IF(ROW()-${R0-1}=MATCH(MAX($${cP}$${R0}:$${cP}$${RL}),$${cP}$${R0}:$${cP}$${RL},0),$B$14,0)`,P.pcts[i]),'0.00');
+      Cs.getCell(`${cFIN}${r}`).font={bold:true};
+    });
+    put(Cs,`A${RL+1}`,'TOTAL',{b:true});put(Cs,`${cFIN}${RL+1}`,fx(`SUM(${cFIN}${R0}:${cFIN}${RL})`,100),{b:true,fmt:'0.00'});
+    Cs.views=[{state:'frozen',xSplit:1,ySplit:R0-1}];
+    // ── Simulação: saldo mês a mês (nunca negativo), atual e proposto ──
+    put(Ss,'A1','Simulação do saldo de cada UC mês a mês — s(t) = MAX(0; s(t−1) + rateio × créditos(t) − d). Nos primeiros meses vale o rateio atual.',{b:true});
+    Ss.getColumn(1).width=16;
+    const mesesSim=C.creditos.map(c=>rtLbl(c.comp));
+    put(Ss,'A3','Instalação',{b:true});
+    mesesSim.forEach((m,k)=>{put(Ss,`${colL(1+k)}2`,'Proposto',{b:true,fill:1});put(Ss,`${colL(1+k)}3`,m,{b:true,fill:1});put(Ss,`${colL(14+k)}2`,'Atual',{b:true,fill:2});put(Ss,`${colL(14+k)}3`,m,{b:true,fill:2})});
+    const simP=rtSimular(L.ucs,P.pcts,RT.G,RT.TM,RT.LAG),simA=rtSimular(L.ucs,L.ucs.map(u=>u.atual),RT.G,RT.TM,RT.LAG);
+    L.ucs.forEach((u,i)=>{const r=4+i,rc=R0+i;Ss.getCell(`A${r}`).value=fx(`${RS}!A${u.linha+1}`,u.inst);
+      for(let t=0;t<T;t++){const g=`${PS}!$E$${r0c+t}`,lista=`${PS}!$F$${r0c+t}`;
+        const ant=t===0?`${CS}!$D${rc}`:`${colL(t)}${r}`,antA=t===0?`${CS}!$D${rc}`:`${colL(13+t)}${r}`;
+        const cp=Ss.getCell(`${colL(1+t)}${r}`);cp.value=fx(`MAX(0,${ant}+IF(${lista}="atual",${CS}!$E${rc},${CS}!$${cFIN}${rc})/100*${g}-${CS}!$C${rc})`,simP.hist[t][i]);cp.numFmt='#,##0';
+        const ca=Ss.getCell(`${colL(14+t)}${r}`);ca.value=fx(`MAX(0,${antA}+${CS}!$E${rc}/100*${g}-${CS}!$C${rc})`,simA.hist[t][i]);ca.numFmt='#,##0'}});
+    Ss.views=[{state:'frozen',xSplit:1,ySplit:3}];
+    // ── Rateios: colunas ao lado do rateio sugerido, ligadas às abas de cálculo ──
+    const cab=['RATEIO PROPOSTO GDSUN','DIFERENÇA vs ATUAL (p.p.)','CONSUMO COMPENSÁVEL (kWh/mês)','MESES DE SALDO HOJE',`SALDO PREVISTO ${fimLbl} - ATUAL`,`SALDO PREVISTO ${fimLbl} - PROPOSTO`,`MESES DE SALDO ${fimLbl} - PROPOSTO`,'OBSERVAÇÃO'];
     cab.forEach((t,k)=>{const c=ws.getRow(h).getCell(c0+k+1);c.value=t;c.font={bold:true};c.fill=azul;c.alignment={wrapText:true,vertical:'middle'};ws.getColumn(c0+k+1).width=k===7?70:14});
     ws.getRow(h).height=45;
-    const Gat=RT.G.slice(0,RT.LAG).reduce((s,v)=>s+v,0),Gnv=RT.G.slice(RT.LAG).reduce((s,v)=>s+v,0);
-    L.ucs.forEach((u,i)=>{
-      const r=u.linha+1,row=ws.getRow(r),d=P.dbar[i],sat=u.atual/100;
-      const vX=Math.max(0,u.saldo+sat*(Gat+Gnv)-12*d),vY=Math.max(0,u.saldo+sat*Gat+P.pcts[i]/100*Gnv-12*d);
+    L.ucs.forEach((u,i)=>{const r=u.linha+1,rc=R0+i,rs=4+i,row=ws.getRow(r),d=P.dbar[i];
       const set=(k,v,fmt,bold)=>{const c=row.getCell(c0+k+1);c.value=v;if(fmt)c.numFmt=fmt;if(bold)c.font={bold:true}};
-      set(0,P.pcts[i],'0.00',true);
-      set(1,{formula:`${L_(0)}${r}-${cAt}${r}*${100/divAt}`,result:P.pcts[i]-u.atual},'+0.00;-0.00;0.00');
-      set(2,{formula:`MAX(0,MEDIAN(${cIni}${r}:${cFim}${r})-${PS}!$C$6)`,result:d},'#,##0');
-      set(3,{formula:`IF(${L_(2)}${r}>0,${cSal}${r}/${L_(2)}${r},"—")`,result:d>0?u.saldo/d:'—'},'0.0');
-      set(4,{formula:`MAX(0,${cSal}${r}+${cAt}${r}/${divAt}*${PS}!$C$26-12*${L_(2)}${r})`,result:vX},'#,##0');
-      set(5,{formula:`MAX(0,${cSal}${r}+${cAt}${r}/${divAt}*${PS}!$C$24+${L_(0)}${r}/100*${PS}!$C$25-12*${L_(2)}${r})`,result:vY},'#,##0');
-      set(6,{formula:`IF(${L_(2)}${r}>0,${L_(5)}${r}/${L_(2)}${r},"—")`,result:d>0?vY/d:'—'},'0.0');
-      set(7,RT.linhas[i].obs.txt);
-    });
-    const ultLinha=Math.max(...L.ucs.map(u=>u.linha))+1,tr=ultLinha+1;
-    const tot=ws.getRow(tr);tot.getCell(1).value='TOTAL';tot.getCell(1).font={bold:true};
-    tot.getCell(c0+1).value={formula:`SUM(${L_(0)}${h+1}:${L_(0)}${ultLinha})`,result:100};tot.getCell(c0+1).numFmt='0.00';tot.getCell(c0+1).font={bold:true};
-    // aba de premissas
-    const old=wb.getWorksheet('Proposta GDSUN');if(old)wb.removeWorksheet(old.id);
-    const Ps=wb.addWorksheet('Proposta GDSUN');
-    [['A',3],['B',66],['C',16],['D',16],['E',16],['F',60]].forEach(([c,w])=>Ps.getColumn(c).width=w);
-    const put=(a,v,o={})=>{const c=Ps.getCell(a);c.value=v;if(o.b||o.sz||o.i||o.cor)c.font={bold:!!o.b,size:o.sz||11,italic:!!o.i,color:o.cor?{argb:o.cor}:undefined};if(o.fmt)c.numFmt=o.fmt;if(o.fill)c.fill=azul;if(o.wrap)c.alignment={wrapText:true,vertical:'top'}};
-    const ult=L.meses[L.meses.length-1];
-    put('B2',`Proposta de rateio GDSUN — ${RT.ufv}`,{b:true,sz:14});
-    put('B3',`${C.cliente||''} · ${C.mod||''} · consumos de ${rtLbl(L.meses[0])} a ${rtLbl(ult)} e saldo final de ${rtLbl(ult)} · arquivo ${RT.fileName}`,{i:true,cor:'FF595959'});
-    put('B5','Premissas (células em azul podem ser alteradas)',{b:true});
-    put('B6','Taxa mínima não compensável por UC (kWh/mês)');put('C6',RT.TM,{fill:1});put('F6',RT.tmMedido!=null?`Medido no Controle_GdE: ~${Math.round(RT.tmMedido)} kWh/UC/mês de consumo não compensado nos últimos 12 meses.`:'Custo de disponibilidade (taxa mínima).',{i:true,cor:'FF595959',sz:9,wrap:true});
-    put('B7','Meses até a nova lista valer');put('C7',RT.LAG,{fill:1});put('F7','Nesses meses a lista atual continua valendo (prazo da concessionária para aplicar a nova).',{i:true,cor:'FF595959',sz:9,wrap:true});
-    put('B9',`Créditos esperados por mês de compensação (${C.gc?'energia injetada no próprio mês':'energia injetada no mês anterior, M-1'})`,{b:true});
-    ['Mês da compensação','Créditos (MWh)','Lista que vale','','Fonte'].forEach((t,k)=>{if(t)put(`${'BCDEF'[k]}10`,t,{b:true})});
-    C.creditos.forEach((c,k)=>{const r=11+k;put(`B${r}`,rtLbl(c.comp));put(`C${r}`,Math.round(c.kwh/100)/10,{fmt:'#,##0.0',fill:1});
-      Ps.getCell(`D${r}`).value={formula:`IF(ROW()-10<=$C$7,"atual","proposta")`,result:k<RT.LAG?'atual':'proposta'};put(`F${r}`,c.fonte,{i:true,cor:'FF595959',sz:9})});
-    put('B24','Créditos com a lista atual (kWh)');Ps.getCell('C24').value={formula:'SUMIF(D11:D22,"atual",C11:C22)*1000',result:Gat};Ps.getCell('C24').numFmt='#,##0';
-    put('B25','Créditos com a nova lista (kWh)');Ps.getCell('C25').value={formula:'SUMIF(D11:D22,"proposta",C11:C22)*1000',result:Gnv};Ps.getCell('C25').numFmt='#,##0';
-    put('B26','Créditos em 12 meses (kWh)',{b:true});Ps.getCell('C26').value={formula:'C24+C25',result:Gat+Gnv};Ps.getCell('C26').numFmt='#,##0';
-    put('B28',`Comparação dos cenários — simulação mês a mês, ${rtLbl(rtAdd(ult,1))} a ${rtLbl(rtAdd(ult,12))}`,{b:true});
-    put('F28','Valores da simulação (saldo de cada UC nunca negativo; o que faltar é energia não compensada).',{i:true,cor:'FF595959',sz:9,wrap:true});
-    put('B29','Indicador',{b:true});RT.I.forEach(([n],k)=>put(`${'CDE'[k]}29`,n,{b:true}));
-    const ind=[['Energia não compensada depois que a nova lista vale (MWh)',x=>x.naoCompDepois/1000,'#,##0.0'],['Energia não compensada antes da nova lista valer (MWh)',x=>x.naoCompAntes/1000,'#,##0.0'],
-      ['Menor saldo de qualquer UC depois que a nova lista vale (meses)',x=>x.pisoMin,'0.00'],['UCs com menos de 1 mês de saldo em algum momento',x=>x.abaixo1,'0'],['UCs com menos de 2 meses de saldo em algum momento',x=>x.abaixo2,'0'],
-      ['Meses de saldo no fim — 10% das UCs abaixo de',x=>x.p10,'0.0'],['Meses de saldo no fim — mediana',x=>x.med,'0.0'],['Meses de saldo no fim — 90% das UCs abaixo de',x=>x.p90,'0.0'],
-      ['UCs com rateio zero',x=>x.zeros,'0'],['Saldo total no fim (MWh)',x=>x.saldoFim/1000,'#,##0.0']];
-    ind.forEach(([t,fn,fmt],k)=>{const r=30+k;put(`B${r}`,t);RT.I.forEach(([,x],j)=>put(`${'CDE'[j]}${r}`,Math.round(fn(x)*100)/100,{fmt}))});
-    put('B42','Como a proposta foi calculada',{b:true});
-    [`1. Consumo de cada UC: mediana dos meses da lista (robusta a picos isolados) menos a taxa mínima — só o que passa da taxa mínima consome crédito.`,
-     `2. Créditos: energia injetada da usina mês a mês, a partir do Controle_GdE (real quando já lançada; senão média do mesmo mês nos anos anteriores), com a sazonalidade da geração.`,
-     `3. Objetivo: ao fim do ciclo de 12 meses, todas as UCs que recebem rateio com o mesmo número de meses de saldo (${P.m.toFixed(1).replace('.',',')} meses). Assim nenhuma UC acumula enquanto outra zera.`,
-     `4. UCs com saldo de sobra ficam com rateio zero até consumi-lo. Saldo só pode ser redistribuído de UC desativada; nas demais ele sai apenas pelo consumo da própria UC.`,
-     `5. Ajuste de segurança: correção mínima do rateio para que nenhuma UC fique sem crédito depois que a nova lista valer.`,
-     `6. Arredondamento em 2 casas decimais com soma exata de 100%. As colunas de saldo previsto são fórmulas ligadas a estas premissas.`].forEach((t,k)=>{const r=43+k;put(`B${r}`,t,{wrap:true});Ps.mergeCells(`B${r}:F${r}`);Ps.getRow(r).height=32});
+      set(0,fx(`${CS}!${cFIN}${rc}`,P.pcts[i]),'0.00',true);
+      set(1,fx(`${LC(0)}${r}-${CS}!E${rc}`,P.pcts[i]-u.atual),'+0.00;-0.00;0.00');
+      set(2,fx(`${CS}!C${rc}`,d),'#,##0');
+      set(3,fx(`IF(${LC(2)}${r}>0,${cSal}${r}/${LC(2)}${r},"—")`,d>0?u.saldo/d:'—'),'0.0');
+      set(4,fx(`${SS}!${colL(13+T)}${rs}`,simA.hist[T-1][i]),'#,##0');
+      set(5,fx(`${SS}!${colL(T)}${rs}`,simP.hist[T-1][i]),'#,##0');
+      set(6,fx(`IF(${LC(2)}${r}>0,${LC(5)}${r}/${LC(2)}${r},"—")`,d>0?simP.hist[T-1][i]/d:'—'),'0.0');
+      set(7,RT.linhas[i].obs.txt);});
+    const tr=Math.max(...L.ucs.map(u=>u.linha))+2,tot=ws.getRow(tr);
+    tot.getCell(1).value='TOTAL';tot.getCell(1).font={bold:true};
+    tot.getCell(c0+1).value=fx(`SUM(${LC(0)}${h+1}:${LC(0)}${tr-1})`,100);tot.getCell(c0+1).numFmt='0.00';tot.getCell(c0+1).font={bold:true};
     const out=await wb.xlsx.writeBuffer();
     if(opts.retornar)return out;
-    const nome=`Rateio_${RT.ufv.replace(/[^\wÀ-ú-]+/g,'_')}_proposta_GDSUN.xlsx`;
+    const nome=`Rateio_${RT.ufv.replace(/[^\wÀ-ú-]+/g,'_')}${RT.ugInfo&&RT.UG.ugs.length>1?'_'+RT.ugInfo.sigla:''}_proposta_GDSUN.xlsx`;
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
     a.download=nome;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
     toast(`Planilha exportada: ${nome}`,'ok');
