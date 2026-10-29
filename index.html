@@ -226,7 +226,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.9 · 28/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.10 · 28/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -481,9 +481,18 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.9 (28/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.10 (28/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
+// Usina com IJ defasada: concessionária "Equatorial GO" na coluna Concessionária do Controle_GdE;
+// a lista abaixo vale como reserva (base sem a coluna)
+function ufvIJDefasada(ufv){
+  if(!ufv)return false;
+  const recs=(window._PARSE&&window._PARSE.recs)||[];
+  const comConc=recs.filter(r=>r.ufv===ufv&&r.conc);
+  if(comConc.length)return comConc.some(r=>/equatorial\s*go/i.test(r.conc));
+  return UFV_IJ_DEFASAGEM.some(u=>_nrm(u)===_nrm(ufv));
+}
 const UFV_IJ_DEFASAGEM=['Leopoldo Bulhões I','Leopoldo Bulhões II','Niquelândia','Niquelândia II',
   'Leopoldo Bulhões - UFV1','Leopoldo Bulhões - UFV2','Niquelândia - UFV4']; // nomes antigos e atuais
 // UFVs renomeadas no Controle_GdE (out/2026): nome antigo → nome atual.
@@ -982,9 +991,8 @@ function analyzeDpsp(wb,fileName){
   const ijTotal=ijIdx>=0?pf(ugDataRow[ijIdx]):0;
   let ugSummary=[];
   if(ijTotal>0){
-    const ufvDpsp=guessUFV(fileName);
-    const mesIJDpsp=(ufvDpsp&&UFV_IJ_DEFASAGEM.includes(ufvDpsp)&&detectedMes)?prevMonth(detectedMes):detectedMes;
-    ugSummary.push({ug:sName,injecao:ijTotal,saldoUG:0,mes:mesIJDpsp});
+    // o mês é o da fatura; a defasagem da Equatorial GO é aplicada na Regra 7 (igual para todos os modelos)
+    ugSummary.push({ug:sName,injecao:ijTotal,saldoUG:0,mes:detectedMes});
   }
 
   // IPCA: linha 5 pode ter labels de IPCA
@@ -1399,7 +1407,7 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
     // Potencial de linhas vazias: usa IJ real do mês anterior (IJ_REAL_DB[ufv|mesM1])
     // Para concessionárias com defasagem (Equatorial GO), a IJ da medição já é M-1,
     // então usamos a IJ da própria medição para evitar duplo deslocamento.
-    const ufvTemDefasagem=opts.ijDeslocada||(ufv&&UFV_IJ_DEFASAGEM.some(u=>ufv.includes(u)||u.includes(ufv)));
+    const ufvTemDefasagem=opts.ijDeslocada||ufvIJDefasada(ufv);
     const ijRealM1=ufv&&mesM1?IJ_REAL_DB[`${ufv}|${mesM1}`]:null;
     const ijParaPotVazio=ufvTemDefasagem
       ?(ugSummary&&ugSummary.length>0?ugSummary.reduce((s,u)=>s+u.injecao,0):ijM1_kwh)
@@ -1525,7 +1533,12 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
       ugPorMes[m].ijs.push(u.injecao);
       ugPorMes[m].ugs.push(u.ug);
     });
-    Object.entries(ugPorMes).forEach(([mesFat,{ijs,ugs}])=>{
+    // Equatorial GO: a IJ da fatura do mês é a geração do mês anterior (ex.: fatura de set/26 = GL de ago/26).
+    // No modelo Claro o leitor já desloca o mês da UG (opts.ijDeslocada) — não desloca de novo.
+    const defasada=!opts.ijDeslocada&&ufvIJDefasada(ufv);
+    Object.entries(ugPorMes).forEach(([mesFatura,{ijs,ugs}])=>{
+      const mesFat=defasada?prevMonth(mesFatura):mesFatura;
+      const notaDef=defasada?` · fatura de ${mesFatura} = geração de ${mesFat} (Equatorial GO)`:'';
       const totalIJkwh=ijs.reduce((s,v)=>s+v,0);
       const glMes=getGL(ufv,mesFat);
       if(glMes!==null){
@@ -1534,7 +1547,7 @@ function applyRules(ucs,ufv,mes,ugSummary,ipcaLabels=[],opts={}){
         const sinalR7=totalIJkwh>=glKwh?'acima':'abaixo';
         const dp=`${sinalR7==='acima'?'+':'−'}${(desvio*100).toFixed(1)}%`;
         const ugLabel=ugs.length>1?`UGs ${ugs.join('+')}`:ugs[0];
-        const det=`${ugLabel} · IJ medição: ${Math.round(totalIJkwh).toLocaleString('pt-BR')} kWh · GL banco (${mesFat}): ${Math.round(glKwh).toLocaleString('pt-BR')} kWh · Desvio: ${dp}`;
+        const det=`${ugLabel} · IJ medição: ${Math.round(totalIJkwh).toLocaleString('pt-BR')} kWh · GL banco (${mesFat}): ${Math.round(glKwh).toLocaleString('pt-BR')} kWh · Desvio: ${dp}${notaDef}`;
         const dirR7=sinalR7==='acima'
           ?`IJ da medição acima do GL do banco em ${dp} — pode indicar reconhecimento de energia acima do registrado ou compensação de saldo acumulado de meses anteriores. Recomenda-se analisar o histórico de IJ.`
           :`IJ da medição abaixo do GL do banco em ${dp} — IJ subestimada ou perda de geração não registrada. Recomenda-se analisar o histórico de IJ para identificar se houve reconhecimentos abaixo do esperado em meses anteriores.`;
@@ -1702,7 +1715,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.9 · 28/10/26';
+const PORTAL_VERSAO='v3.10 · 28/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -1744,6 +1757,7 @@ const CAMPOS=[
   {k:'cp',lbl:'CP (compensada)',energia:true,exact:['cp','cp mwh','cp kwh','compensado','compensada','compensacao','energia compensada'],tok:['cp'],inc:['compens']},
   {k:'saldo',lbl:'Saldo (total)',energia:true,exact:['saldo','saldo mwh','saldo kwh','saldo acumulado','saldo final','saldo total'],tok:['saldo'],inc:['saldo']},
   {k:'potencia',lbl:'Potência instalada',exact:['potencia instalada kwp','potencia instalada','potencia instalada mwp','potencia kwp','potencia'],tok:['potencia'],inc:['potencia']},
+  {k:'conc',lbl:'Concessionária',exact:['concessionaria','distribuidora','disco'],tok:[],inc:[]},
   {k:'ugs',lbl:'UGs (siglas das unidades geradoras)',exact:['ugs'],tok:[],inc:[]},
   {k:'ugnum',lbl:'Nº da UG (unidade geradora)',exact:['ug','uc geradora','unidade geradora','numero da ug'],tok:[],inc:[]},
   {k:'consumo_ug',lbl:'Consumo UG',energia:true,exact:['consumo ug','consumo da ug','consumo ug mwh','consumo ug kwh'],tok:[],inc:['consumo ug']},
@@ -1841,7 +1855,7 @@ function parseControle(buf){
       ufv:String(ufv).trim(),
       mod:get(row,'modalidade')!=null?String(get(row,'modalidade')).trim():null,
       mes,gl:toNum(get(row,'gl')),ij:toNum(get(row,'ij')),cp:toNum(get(row,'cp')),
-      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),ugnum:ugNorm(get(row,'ugnum')),ugs:String(get(row,'ugs')??'').trim()||null,pot:toNum(get(row,'potencia')),
+      saldo:toNum(get(row,'saldo')),consumo:toNum(get(row,'consumo')),cug:toNum(get(row,'consumo_ug')),ugnum:ugNorm(get(row,'ugnum')),ugs:String(get(row,'ugs')??'').trim()||null,conc:String(get(row,'conc')??'').trim()||null,pot:toNum(get(row,'potencia')),
     });
   }
   // Potência: padrão kWp (como na planilha); cabeçalho em MWp é convertido
