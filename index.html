@@ -226,7 +226,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.12 · 28/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.15 · 28/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -481,7 +481,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.12 (28/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.15 (28/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 // Usina com IJ defasada: concessionária "Equatorial GO" na coluna Concessionária do Controle_GdE;
@@ -1080,11 +1080,32 @@ function analyzeClaro(wb,fileName){
   // Beneficiárias (beneficiarias1 ↔ 1ª geradora, …)
   const bens=wb.SheetNames.filter(n=>/^benefici/i.test(n)).sort((a,b)=>(+a.replace(/\D/g,'')||0)-(+b.replace(/\D/g,'')||0));
   if(!bens.length){showError('Abas de beneficiárias não encontradas. Verifique o modelo Claro.');return}
-  const allUCs=[],antigas={};
+  const allUCs=[],antigas={},semTarifa=[];let colTarifa=null;
+  // Tarifa c/ imposto s/ bandeira: verificada na aba "cálculo bandeira" (uma linha por UC), só nas UCs com fatura do mês
+  const bandeira=(()=>{
+    const sn=wb.SheetNames.find(n=>/bandeira/i.test(_nrm(n)));if(!sn)return null;
+    const R=rows(sn);
+    for(let i=0;i<Math.min(R.length,10);i++){
+      const tx=R[i].map(x=>_nrm(x));
+      const cU=tx.findIndex(x=>x.includes('unidade consumidora')),cT=tx.findIndex(x=>/tarifa/.test(x)&&/impost/.test(x)&&/s\/?\s*bandeir/.test(x)),cM=tx.findIndex(x=>/mes de referencia/.test(x));
+      if(cU<0||cT<0)continue;
+      const mapa={};
+      for(let k=i+1;k<R.length;k++){const ucb=String(R[k][cU]??'').replace(/\.0+$/,'').replace(/\D/g,'');if(ucb.length<5)continue;
+        mapa[ucb]={tarifa:R[k][cT],mes:cM>=0?ymDe(R[k][cM]):null}}
+      return {aba:sn,coluna:String(R[i][cT]).trim(),mapa};
+    }
+    return null;
+  })();
+  if(bandeira)colTarifa=`${bandeira.coluna}" da aba "${bandeira.aba}`;
   bens.forEach((bn,k)=>{
     const R=rows(bn),h=R[0]||[];
     const c={nro:0,uc:col(h,'unidade consumidora'),pct:col(h,'rateio'),saldoAnt:col(h,'provenientes'),consumo:col(h,'consumo'),
       comp:col(h,'compensada'),saldo:col(h,'seguinte'),mes:col(h,'refer'),taxMin:col(h,'taxa m')};
+    {const tx=h.map(x=>_nrm(x));const imp=i=>/tarifa/.test(tx[i])&&/impost/.test(tx[i]);
+     c.tar=tx.findIndex((x,i)=>imp(i)&&/s\/?\s*bandeira/.test(x));
+     if(c.tar<0)c.tar=tx.findIndex((x,i)=>imp(i)&&!/bandeira/.test(x));
+     if(c.tar<0)c.tar=tx.findIndex((x,i)=>imp(i));
+     c.tarNome=c.tar>=0?String(h[c.tar]).trim():null;if(c.tarNome&&!bandeira)colTarifa=c.tarNome}
     const ugNome=(geradoras[k]&&geradoras[k].nome)||bn;
     for(let i=1;i<R.length;i++){
       const r=R[i];const nro=String(r[c.nro]).trim(),uc=String(r[c.uc]??'').trim();
@@ -1093,10 +1114,25 @@ function analyzeClaro(wb,fileName){
       const mRef=ymDe(r[c.mes]);
       const consumo=pf(r[c.consumo]),taxMin=c.taxMin>=0?pf(r[c.taxMin]):0;
       const antiga=!vazio&&mRef&&mes&&mRef<mes;
-      const u={uc,ug:ugNome,pct:pf(r[c.pct]),consumo,compensada:pf(r[c.comp]),saldo:pf(r[c.saldo]),saldoAnt:c.saldoAnt>=0?pf(r[c.saldoAnt]):0,
+      // linha com dados de fatura da UC (consumo ou compensação): a tarifa com impostos s/ bandeira é obrigatória.
+      // Linha só com o saldo carregado (sem fatura no mês) não exige tarifa.
+      const temInfo=[c.consumo,c.comp].some(k=>k>=0&&r[k]!==''&&r[k]!=null);
+      const tarifa=c.tar>=0?pf(r[c.tar]):null;
+      const u={uc,ug:ugNome,tarifa,pct:pf(r[c.pct]),consumo,compensada:pf(r[c.comp]),saldo:pf(r[c.saldo]),saldoAnt:c.saldoAnt>=0?pf(r[c.saldoAnt]):0,
         icms:null,pis:null,cofins:null, // a medição da Claro não traz impostos por UC
         hasData:!vazio&&!antiga&&!!mRef&&consumo>0,mesFatura:mRef,faturaAntiga:!!antiga,
         taxMin:taxMin>0?taxMin:100,issues:[]};
+      if(bandeira){
+        const b=bandeira.mapa[String(uc).replace(/\D/g,'')];
+        // fatura do mês (mês de referência = mês da medição); faturas antigas reaproveitadas e linhas sem dados ficam de fora
+        if(b&&b.mes&&b.mes===mes){const tv=pf(b.tarifa);
+          if(!(tv>0)){semTarifa.push(uc);
+            u.issues.push({type:'danger',rule:3,msg:`Tarifa c/ imposto s/ bandeira ${b.tarifa===''||b.tarifa==null?'em branco':'zerada'} na aba "${bandeira.aba}" — obrigatória para a UC com fatura do mês.`})}}
+      }
+      else if(c.tar>=0&&temInfo&&!(tarifa>0)){
+        semTarifa.push(uc);
+        u.issues.push({type:'danger',rule:3,msg:`Tarifa com impostos s/ bandeira ${r[c.tar]===''||r[c.tar]==null?'em branco':'zerada'} ("${c.tarNome}") — obrigatória quando a UC tem dados de fatura na linha.`});
+      }
       if(antiga){
         antigas[mRef]=(antigas[mRef]||0)+1;
         u.issues.push({type:'info',rule:0,msg:`Fatura de ${mRef} reaproveitada pela Claro (sem fatura em ${mes}). Retirada da análise energética para não gerar falso positivo — a compensação de ${Math.round(u.compensada).toLocaleString('pt-BR')} kWh é de outro mês. O rateio da UC entra como potencial compensável.`});
@@ -1112,6 +1148,10 @@ function analyzeClaro(wb,fileName){
   const varSaldoMedicao=dUCs+dUG;
   // Avisos do modelo
   const avisos=[];
+  if(semTarifa.length)avisos.push({id:'claro_tarifa',tipo:'danger',titulo:'Tarifa com impostos s/ bandeira zerada ou em branco',
+    msg:`${semTarifa.length} UC(s) com fatura do mês estão com a tarifa c/ imposto s/ bandeira zerada ou em branco (coluna "${esc(colTarifa||'')}"): ${semTarifa.slice(0,12).map(esc).join(', ')}${semTarifa.length>12?` e mais ${semTarifa.length-12}`:''}. Esse valor precisa estar preenchido sempre que a UC tem fatura.`,detalhe:null,extras:null});
+  else if(!colTarifa)avisos.push({id:'claro_tarifa',tipo:'warn',titulo:'Coluna de tarifa com impostos não encontrada',
+    msg:'Não encontrei a coluna de tarifa com impostos nas abas de beneficiárias — a verificação de tarifa não foi feita.',detalhe:null,extras:null});
   const nAnt=Object.values(antigas).reduce((s,v)=>s+v,0);
   if(nAnt){
     const comp=allUCs.filter(u=>u.faturaAntiga).reduce((s,u)=>s+u.compensada,0);
@@ -1715,7 +1755,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.12 · 28/10/26';
+const PORTAL_VERSAO='v3.15 · 28/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -3710,8 +3750,9 @@ async function rtExportar(opts={}){
     ws.getRow(h).height=45;
     L.ucs.forEach((u,i)=>{const r=u.linha+1,rc=R0+i,rs=4+i,row=ws.getRow(r),d=P.dbar[i];
       const set=(k,v,fmt,bold)=>{const c=row.getCell(c0+k+1);c.value=v;if(fmt)c.numFmt=fmt;if(bold)c.font={bold:true}};
-      set(0,fx(`${CS}!${cFIN}${rc}`,P.pcts[i]),'0.00',true);
-      set(1,fx(`${LC(0)}${r}-${CS}!E${rc}`,P.pcts[i]-u.atual),'+0.00;-0.00;0.00');
+      // coluna T em porcentagem do Excel (0,78% = 0,0078); a aba de cálculo segue em pontos percentuais
+      set(0,fx(`${CS}!${cFIN}${rc}/100`,P.pcts[i]/100),'0.00%',true);
+      set(1,fx(`${LC(0)}${r}*100-${CS}!E${rc}`,P.pcts[i]-u.atual),'+0.00;-0.00;0.00');
       set(2,fx(`${CS}!C${rc}`,d),'#,##0');
       set(3,fx(`IF(${LC(2)}${r}>0,${cSal}${r}/${LC(2)}${r},"—")`,d>0?u.saldo/d:'—'),'0.0');
       set(4,fx(`${SS}!${colL(13+T)}${rs}`,simA.hist[T-1][i]),'#,##0');
@@ -3720,7 +3761,7 @@ async function rtExportar(opts={}){
       set(7,RT.linhas[i].obs.txt);});
     const tr=Math.max(...L.ucs.map(u=>u.linha))+2,tot=ws.getRow(tr);
     tot.getCell(1).value='TOTAL';tot.getCell(1).font={bold:true};
-    tot.getCell(c0+1).value=fx(`SUM(${LC(0)}${h+1}:${LC(0)}${tr-1})`,100);tot.getCell(c0+1).numFmt='0.00';tot.getCell(c0+1).font={bold:true};
+    tot.getCell(c0+1).value=fx(`SUM(${LC(0)}${h+1}:${LC(0)}${tr-1})`,1);tot.getCell(c0+1).numFmt='0.00%';tot.getCell(c0+1).font={bold:true};
     const out=await wb.xlsx.writeBuffer();
     if(opts.retornar)return out;
     const nome=`Rateio_${RT.ufv.replace(/[^\wÀ-ú-]+/g,'_')}${RT.ugInfo&&RT.UG.ugs.length>1?'_'+RT.ugInfo.sigla:''}_proposta_GDSUN.xlsx`;
