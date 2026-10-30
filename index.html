@@ -226,7 +226,7 @@ header{gap:1rem}
   <div class="brand"><i class="ti ti-bolt"></i><span>Portal de Análise de Faturamento</span></div>
   <div class="hdr-right">
     <button class="base-pill" id="basePill" onclick="goTab('base')" title="Base Controle_GdE"></button>
-    <span class="vbadge" id="vbadge" title="Versão do portal">v3.15 · 28/10/26</span>
+    <span class="vbadge" id="vbadge" title="Versão do portal">v3.18 · 28/10/26</span>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções do portal"><div class="tabs-in" role="tablist">
@@ -481,7 +481,7 @@ header{gap:1rem}
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<footer>Portal de Análise de Faturamento · v3.15 (28/10/2026) · dados lidos do Controle_GdE</footer>
+<footer>Portal de Análise de Faturamento · v3.18 (28/10/2026) · dados lidos do Controle_GdE</footer>
 <script>
 // UFVs cuja concessionária (Equatorial GO) reporta IJ com defasagem de 1 mês
 // Usina com IJ defasada: concessionária "Equatorial GO" na coluna Concessionária do Controle_GdE;
@@ -1755,7 +1755,7 @@ function applyFilter(type,btn){
 //  BASE CONTROLE_GdE — leitura direta do arquivo (G:, GitHub ou envio)
 // ═════════════════════════════════════════════════════════════════════
 // Versão do portal (aparece no cabeçalho e no rodapé, para conferir qual arquivo está publicado)
-const PORTAL_VERSAO='v3.15 · 28/10/26';
+const PORTAL_VERSAO='v3.18 · 28/10/26';
 const CAMINHO_PADRAO='G:\\Drives compartilhados\\GESTAO DE ENERGIA\\1) Gestão de Energia\\4. Relatórios\\Controle_GdE.xlsx';
 const GITHUB_PADRAO='https://raw.githubusercontent.com/lucasbergamasco-gdsun/Faturamentos-GDSUN/main/analises/Controle_GdE.xlsx';
 const LS_KEY='gdsun.config.v1';
@@ -3314,7 +3314,10 @@ function rtLer(wb,fileName){
       // unidade do rateio: soma ≈ 100 (%) ou ≈ 1 (fração)
       const sa=ucs.reduce((s,u)=>s+u.atual,0);if(sa>0&&sa<1.5)ucs.forEach(u=>u.atual*=100);
       if(cSug>=0){const ss=ucs.reduce((s,u)=>s+(u.sug||0),0);if(ss>0&&ss<1.5)ucs.forEach(u=>{if(u.sug!=null)u.sug*=100})}
-      return {sheet:sn,headerRow:h,ultimaCol:Math.max(...rows[h].map((v,i)=>String(v).trim()?i:-1)),meses:mesesCol.map(m=>m.ym),
+      // planilha já exportada pelo portal: as colunas da proposta anterior são substituídas, não duplicadas
+      const cProp=cab.findIndex(x=>x.includes('rateio proposto gdsun'));
+      const ultimaCol=cProp>0?cProp-1:Math.max(...rows[h].map((v,i)=>String(v).trim()?i:-1));
+      return {sheet:sn,headerRow:h,ultimaCol,meses:mesesCol.map(m=>m.ym),
         cols:{inst:cInst,atual:cAt,saldo:cSal,sug:cSug,meses:mesesCol.map(m=>m.i)},ucs,temSug:cSug>=0,fileName};
     }
   }
@@ -3383,7 +3386,7 @@ function rtIndicadores(sim,pcts,LAG){
     saldoMeio:meio.reduce((s,v)=>s+v,0),saldoFim:hist[T-1].reduce((s,v)=>s+v,0)};
 }
 // ── Proposta GDSUN — em etapas que viram fórmulas na planilha exportada (mesmo resultado na tela e no Excel) ──
-// 1) d = MAX(0; mediana do consumo − taxa mínima)            2) base = saldo + rateio atual × créditos até a lista valer − 12·d
+// 1) d = MAX(0; mediana do consumo − taxa mínima)            2) base = saldo quando a nova lista vale (mês a mês, sem negativo) − meses restantes·d
 // 3) m = (Σ base + créditos da nova lista) ÷ Σ d, só UCs ativas; sai quem tem m·d ≤ base; repete (8 rodadas)
 // 4) p = (m·d − base) ÷ créditos da nova lista               5) segurança: rateio mínimo p/ o saldo não ficar negativo; normaliza p/ somar 100%
 // 6) arredonda em 2 casas; a diferença para 100% vai para a maior UC
@@ -3391,7 +3394,10 @@ function rtPropor(ucs,G,TM,LAG,RODADAS=8){
   const n=ucs.length,T=G.length,med=ucs.map(u=>rtMediana(u.cons)),d=med.map(v=>Math.max(0,v-TM));
   const Gold=[],Gnew=[];let a=0,b=0;for(let t=0;t<T;t++){if(t<LAG)a+=G[t];else b+=G[t];Gold.push(a);Gnew.push(b)}
   const GN=Gnew[T-1],GO=Gold[T-1];
-  const base=ucs.map((u,i)=>Math.max(0,u.saldo)+u.atual/100*GO-T*d[i]);         // saldo no fim sem a nova lista
+  // saldo de cada UC quando a nova lista passa a valer: meses com o rateio atual, mês a mês, sem ficar negativo
+  // (o que a UC não compensou nesses meses já foi pago na fatura — não é dívida a recuperar depois)
+  const sLag=ucs.map((u,i)=>{let s=Math.max(0,u.saldo);for(let t=0;t<LAG;t++)s=Math.max(0,s+u.atual/100*G[t]-d[i]);return s});
+  const base=sLag.map((s,i)=>s-(T-LAG)*d[i]);   // saldo no fim sem a nova lista
   let ativo=d.map(v=>v>0);const ms=[];const hist=[ativo.slice()];
   for(let r=0;r<RODADAS;r++){
     let sb=0,sd=0;ativo.forEach((v,i)=>{if(v){sb+=base[i];sd+=d[i]}});
@@ -3401,7 +3407,7 @@ function rtPropor(ucs,G,TM,LAG,RODADAS=8){
   const m=ms[ms.length-1],convergiu=hist[RODADAS].every((v,i)=>v===hist[RODADAS-1][i]);
   const peq=ativo.map((v,i)=>v?(m*d[i]-base[i])/GN:0);
   // segurança: rateio mínimo para o saldo não ficar negativo em nenhum mês após a nova lista
-  const pmin=ucs.map((u,i)=>{let mx=0;for(let t=LAG;t<T;t++){const bt=Math.max(0,u.saldo)+u.atual/100*Gold[t]-d[i]*(t+1);if(Gnew[t]>0)mx=Math.max(mx,-bt/Gnew[t])}return d[i]>0?mx:0});
+  const pmin=ucs.map((u,i)=>{let mx=0;for(let t=LAG;t<T;t++){const bt=sLag[i]-d[i]*(t-LAG+1);if(Gnew[t]>0)mx=Math.max(mx,-bt/Gnew[t])}return d[i]>0?mx:0});
   // créditos não cobrem o consumo (m ≤ 0): não há como proteger todas — vale o rateio equalizado (déficit dividido por igual)
   const cobre=m>0;
   const extra=peq.map((v,i)=>cobre?Math.max(0,pmin[i]-v):0),sx=extra.reduce((s,v)=>s+v,0);
@@ -3412,7 +3418,7 @@ function rtPropor(ucs,G,TM,LAG,RODADAS=8){
   const p=ppre.map(v=>spre>0?v/spre:0);
   const r2=p.map(v=>Math.round(v*100*100)/100),resid=Math.round((100-r2.reduce((s,v)=>s+v,0))*100)/100;
   const imax=p.indexOf(Math.max(...p));const pcts=r2.map((v,i)=>i===imax?Math.round((v+resid)*100)/100:v);
-  return {pcts,m,ms,hist,convergiu,ajustes:sx*100,zerosSobra:d.filter((v,i)=>v>0&&!ativo[i]).length,dbar:d,med,base,peq,pmin,extra,f,sx,sdoa,ppre,spre,p,r2,resid,imax,Gold,Gnew,cobre,normalizou:Math.abs(spre-1)>1e-9};
+  return {pcts,m,ms,hist,convergiu,ajustes:sx*100,zerosSobra:d.filter((v,i)=>v>0&&!ativo[i]).length,dbar:d,med,sLag,base,peq,pmin,extra,f,sx,sdoa,ppre,spre,p,r2,resid,imax,Gold,Gnew,cobre,normalizou:Math.abs(spre-1)>1e-9};
 }
 // Observação por UC (saldo só pode ser redistribuído de UC desativada)
 function rtObservacao(u,prop,dbar){
@@ -3498,7 +3504,7 @@ function rtCarregar(buf,fileName){
   const L=rtLer(wb,fileName);
   if(!L){rtErro('Não encontrei as colunas de instalação, meses de consumo, RATEIO ATUAL e SALDO FINAL.');return}
   const ufvs=[...new Set(window._PARSE.recs.map(r=>r.ufv).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  RT={buf,wb,fileName,L,ufvs,ufv:rtAdivinharUFV(wb,fileName,ufvs),TM:null,LAG:2,ugSel:undefined};
+  RT={buf,wb,fileName,L,ufvs,ufv:rtAdivinharUFV(wb,fileName,ufvs),TM:null,LAG:2,HZ:12,ugSel:undefined};
   rtRender();
 }
 function rtParam(){
@@ -3506,6 +3512,7 @@ function rtParam(){
   const ugEl=document.getElementById('rtUG');if(ugEl&&RT.ugSel!==undefined)RT.ugSel=ugEl.value;
   const tm=rtNum(document.getElementById('rtTM').value),lag=rtNum(document.getElementById('rtLag').value);
   RT.TM=tm!=null&&tm>=0?tm:100;RT.LAG=lag!=null&&lag>=0&&lag<=6?Math.round(lag):2;
+  const hz=rtNum(document.getElementById('rtHz').value);RT.HZ=hz!=null&&hz>RT.LAG?Math.min(12,Math.round(hz)):12;
   rtRender(true);
 }
 function rtRender(manterParam){
@@ -3535,6 +3542,7 @@ function rtRender(manterParam){
       <label class="muted" style="display:flex;align-items:center;gap:8px">Usina <select id="rtUfv" class="map-sel" style="width:auto" onchange="rtParam()">${opts}</select></label>
       <label class="muted" style="display:flex;align-items:center;gap:8px" title="Parte do consumo de cada UC que não pode ser compensada (custo de disponibilidade)">Taxa mínima (kWh/UC/mês) <input id="rtTM" class="map-sel" style="width:70px" value="${RT.TM??100}" onchange="rtParam()"></label>
       <label class="muted" style="display:flex;align-items:center;gap:8px" title="Meses em que a lista atual ainda vale, até a concessionária aplicar a nova">Meses até a nova lista valer <input id="rtLag" class="map-sel" style="width:50px" value="${RT.LAG}" onchange="rtParam()"></label>
+      <label class="muted" style="display:flex;align-items:center;gap:8px" title="Período em que o saldo de cada UC é diluído e no fim do qual todas ficam com o mesmo fôlego (máx. 12)">Horizonte de planejamento (meses) <input id="rtHz" class="map-sel" style="width:50px" value="${RT.HZ}" onchange="rtParam()"></label>
       <button class="btn btn-primary" id="rtExp" onclick="rtExportar()"${RT.ufv?'':' disabled'}><i class="ti ti-download"></i> Exportar planilha com a proposta</button>
     </div>`;
   if(!RT.ufv){h+=`<p class="hint" style="margin-top:.75rem">Não identifiquei a usina pelo nome do arquivo. Escolha a usina para buscar o histórico de geração no Controle_GdE.</p></div>`;el.innerHTML=h;return}
@@ -3559,13 +3567,16 @@ function rtRender(manterParam){
   if(avisos.length)h+=`<div class="ck ck-warn" style="margin-top:.5rem">${avisos.map(esc).join('<br>')}</div>`;
   h+=`</div>`;
   // cálculo
-  const P=rtPropor(L.ucs,G,RT.TM,RT.LAG);RT.P=P;RT.C=C;RT.G=G;
+  // horizonte de planejamento (padrão 12 meses a partir de hoje): o saldo de cada UC é diluído nesse período,
+  // em vez de a UC ficar com rateio zero até gastá-lo — assim o acúmulo não só troca de UC
+  const H=Math.min(G.length,Math.max(RT.LAG+1,RT.HZ)),Gh=G.slice(0,H);RT.H=H;
+  const P=rtPropor(L.ucs,Gh,RT.TM,RT.LAG);RT.P=P;RT.C=C;RT.G=G;RT.Gh=Gh;
   const cen=[['Rateio atual',L.ucs.map(u=>u.atual)]];if(L.temSug)cen.push(['Rateio sugerido (planilha)',L.ucs.map(u=>u.sug||0)]);cen.push(['Proposto GDSUN',P.pcts]);
-  const I=cen.map(([n,pc])=>[n,rtIndicadores(rtSimular(L.ucs,pc,G,RT.TM,RT.LAG),pc,RT.LAG)]);RT.I=I;
-  const fim=rtLbl(rtAdd(ult,12)),ini=rtLbl(rtAdd(ult,RT.LAG+1));
+  const I=cen.map(([n,pc])=>[n,rtIndicadores(rtSimular(L.ucs,pc,Gh,RT.TM,RT.LAG),pc,RT.LAG)]);RT.I=I;
+  const fim=rtLbl(rtAdd(ult,H)),ini=rtLbl(rtAdd(ult,RT.LAG+1));
   const linha=(rot,fn,fmt,melhor)=>{const v=I.map(([,x])=>fn(x));const b=melhor?v.indexOf(melhor==='min'?Math.min(...v):Math.max(...v)):-1;
     return `<tr><td>${rot}</td>${v.map((x,k)=>`<td style="text-align:right${k===b?';font-weight:600;color:var(--green)':''}">${fmt(x)}</td>`).join('')}</tr>`};
-  h+=`<div class="rel-card" style="margin-top:1rem"><div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-chart-line"></i></span><div><strong>Comparação dos cenários</strong><span class="muted"> · simulação mês a mês de ${rtLbl(rtAdd(ult,1))} a ${fim}; a nova lista vale a partir de ${ini}</span></div></div>
+  h+=`<div class="rel-card" style="margin-top:1rem"><div class="rel-card-hdr"><span class="rel-ico"><i class="ti ti-chart-line"></i></span><div><strong>Comparação dos cenários</strong><span class="muted"> · simulação mês a mês de ${rtLbl(rtAdd(ult,1))} a ${fim} (horizonte de ${H} meses); a nova lista vale a partir de ${ini}</span></div></div>
     <div class="tbl-wrap" style="margin-top:.6rem"><table><thead><tr><th>Indicador</th>${I.map(([n])=>`<th style="text-align:right">${esc(n)}</th>`).join('')}</tr></thead><tbody>
     ${linha(`Energia não compensada a partir de ${ini} (MWh)`,x=>x.naoCompDepois/1000,f1,'min')}
     ${linha(`Energia não compensada antes da nova lista valer (MWh)`,x=>x.naoCompAntes/1000,f1)}
@@ -3578,13 +3589,14 @@ function rtRender(manterParam){
     ${linha('UCs com rateio zero',x=>x.zeros,f0)}
     ${linha(`Saldo total em ${fim} (MWh)`,x=>x.saldoFim/1000,f1)}
     </tbody></table></div>
+    ${P.m>=0&&P.m<RT.LAG?`<div class="ck ck-warn" style="margin-top:.6rem"><strong>Fôlego curto.</strong> No fim do horizonte (${fim}) as UCs ficam com ${f1(P.m)} mês(es) de saldo, menos que os ${RT.LAG} meses que uma nova lista leva para valer — o saldo pode zerar antes da próxima troca. Os créditos${RT.ugInfo&&RT.UG.ugs.length>1?' desta UG':''} mal cobrem o consumo da lista.</div>`:''}
     ${P.m<0?`<div class="ck ck-danger" style="margin-top:.6rem"><strong>Os créditos previstos${RT.ugInfo&&RT.UG.ugs.length>1?' desta UG':''} não cobrem o consumo das UCs da lista no ciclo.</strong> O saldo total se esgota de qualquer forma (meses de saldo-alvo ${f1(P.m)}); a proposta divide o déficit por igual entre as UCs (sem ajuste de segurança, que não é possível nesse caso). Avalie retirar UCs da lista${RT.ugInfo&&RT.UG.ugs.length>1?' ou conferir se a UG escolhida está certa':''}.</div>`:''}
-    <p class="hint" style="margin-top:.6rem">${P.convergiu?'':'<strong style="color:var(--amber)">A equalização não convergiu em 8 rodadas — confira a aba de cálculo.</strong> '}Proposta: ao fim do ciclo de 12 meses, todas as UCs que recebem rateio com o mesmo fôlego (${f1(P.m)} meses de saldo); UCs com saldo de sobra ficam com rateio zero até consumi-lo (${P.zerosSobra}); ajuste mínimo para nenhuma UC ficar sem crédito depois que a nova lista valer (${f2(P.ajustes)} p.p.). Saldo só pode ser redistribuído de UC desativada, então o rateio é a única ferramenta para evitar acúmulo.</p>
+    <p class="hint" style="margin-top:.6rem">${P.convergiu?'':'<strong style="color:var(--amber)">A equalização não convergiu em 8 rodadas — confira a aba de cálculo.</strong> '}Proposta: o saldo de cada UC é diluído ao longo do horizonte, e em ${fim} todas as UCs que recebem rateio ficam com o mesmo fôlego (${f1(P.m)} meses de saldo). Quem tem saldo recebe rateio menor, mas não zero; só fica com zero a UC cujo saldo passa do que ela consome em todo o horizonte (${P.zerosSobra}); ajuste mínimo para nenhuma UC ficar sem crédito depois que a nova lista valer (${f2(P.ajustes)} p.p.). Saldo só pode ser redistribuído de UC desativada, então o rateio é a única ferramenta para evitar acúmulo.</p>
     <details class="com-det"><summary>Créditos esperados por mês</summary><div class="tbl-wrap"><table><thead><tr><th>Mês da compensação</th><th style="text-align:right">Usina (MWh)</th><th style="text-align:right">Peso da UG</th><th style="text-align:right">Créditos da lista (MWh)</th><th>Lista que vale</th><th>Fonte</th></tr></thead><tbody>
     ${C.creditos.map((c,k)=>`<tr><td>${rtLbl(c.comp)}</td><td style="text-align:right">${f1(c.kwhUsina/1000)}</td><td style="text-align:right">${f1(RT.peso*100)}%</td><td style="text-align:right">${f1(c.kwh/1000)}</td><td>${k<RT.LAG?'atual':'proposta'}</td><td class="muted">${esc(c.fonte)}</td></tr>`).join('')}
     </tbody></table></div></details></div>`;
   // tabela por UC
-  const simP=rtSimular(L.ucs,P.pcts,G,RT.TM,RT.LAG),fimS=simP.hist[simP.hist.length-1];
+  const simP=rtSimular(L.ucs,P.pcts,Gh,RT.TM,RT.LAG),fimS=simP.hist[simP.hist.length-1];
   RT.linhas=L.ucs.map((u,i)=>{const d=P.dbar[i],o=rtObservacao(u,P.pcts[i],d);
     return {i,inst:u.inst,d,saldo:u.saldo,mesesHoje:d>0?Math.max(0,u.saldo)/d:null,atual:u.atual,sug:u.sug,prop:P.pcts[i],dif:P.pcts[i]-u.atual,mesesFim:d>0?fimS[i]/d:null,obs:o}});
   const cont={};RT.linhas.forEach(l=>cont[l.obs.tipo]=(cont[l.obs.tipo]||0)+1);
@@ -3597,7 +3609,7 @@ function rtRender(manterParam){
 }
 function rtTabela(){
   const f1=v=>v==null?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}),f2=v=>v==null?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),f0=v=>Math.round(v).toLocaleString('pt-BR');
-  const fimLbl=rtLbl(rtAdd(RT.L.meses[RT.L.meses.length-1],12));
+  const fimLbl=rtLbl(rtAdd(RT.L.meses[RT.L.meses.length-1],RT.H||12));
   const cols=[['inst','Instalação'],['d','Consumo compensável (kWh/mês)'],['saldo','Saldo hoje (kWh)'],['mesesHoje','Meses de saldo hoje'],['atual','Rateio atual (%)'],...(RT.L.temSug?[['sug','Sugerido (%)']]:[]),['prop','Proposto GDSUN (%)'],['dif','Diferença (p.p.)'],['mesesFim',`Meses de saldo em ${fimLbl}`],['obs','Observação']];
   let ls=RT.linhas.filter(l=>RT.filtro==='todos'||l.obs.tipo===RT.filtro);
   const {k,dir}=RT.ordem;ls=ls.slice().sort((a,b)=>{const x=k==='obs'?a.obs.txt:a[k],y=k==='obs'?b.obs.txt:b[k];if(x==null)return 1;if(y==null)return -1;return (x<y?-1:x>y?1:0)*dir});
@@ -3625,7 +3637,7 @@ async function rtExportar(opts={}){
     const somaOrig=L.ucs.reduce((s,u)=>s+(rtNum(ws.getRow(u.linha+1).getCell(L.cols.atual+1).value)||0),0),divAt=somaOrig>0&&somaOrig<1.5?0.01:1; // rateio atual em % na conta
     const azul={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDEBF7'}},cinza={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};
     const PS="'Proposta GDSUN'",CS="'Cálculo do rateio'",SS="'Simulação'",RS=`'${ws.name.replace(/'/g,"''")}'`;
-    const ult=L.meses[L.meses.length-1],fimLbl=rtLbl(rtAdd(ult,T)).toUpperCase();
+    const ult=L.meses[L.meses.length-1],fimLbl=rtLbl(rtAdd(ult,RT.H)).toUpperCase();
     ['Proposta GDSUN','Cálculo do rateio','Simulação'].forEach(nm=>{const o=wb.getWorksheet(nm);if(o)wb.removeWorksheet(o.id)});
     const Ps=wb.addWorksheet('Proposta GDSUN'),Cs=wb.addWorksheet('Cálculo do rateio'),Ss=wb.addWorksheet('Simulação');
     const put=(sh,a,v,o={})=>{const c=sh.getCell(a);c.value=v;if(o.b||o.sz||o.i||o.cor)c.font={bold:!!o.b,size:o.sz||11,italic:!!o.i,color:o.cor?{argb:o.cor}:undefined};if(o.fmt)c.numFmt=o.fmt;if(o.fill)c.fill=o.fill===2?cinza:azul;if(o.wrap)c.alignment={wrapText:true,vertical:'top'};return c};
@@ -3638,6 +3650,8 @@ async function rtExportar(opts={}){
     put(Ps,'B6','Taxa mínima não compensável por UC (kWh/mês)');put(Ps,'C6',RT.TM,{fill:1});
     put(Ps,'H6',RT.tmMedido!=null?`Medido no Controle_GdE: ~${Math.round(RT.tmMedido)} kWh/UC/mês sem compensação.`:'Custo de disponibilidade.',{i:true,cor:'FF595959',sz:9,wrap:true});
     put(Ps,'B7','Meses até a nova lista valer');put(Ps,'C7',RT.LAG,{fill:1});
+    put(Ps,'B11','Horizonte de planejamento (meses, a partir de hoje)');put(Ps,'C11',RT.H,{fill:1});
+    put(Ps,'H11','O saldo de cada UC é diluído nesse período (rateio menor, não zero) e no fim dele todas ficam com o mesmo fôlego. Máximo de 12 meses.',{i:true,cor:'FF595959',sz:9,wrap:true});
     const ugs=RT.UG?RT.UG.ugs:[],sel=RT.ugInfo;
     // mesma regra da tela: peso pela potência (kWp) quando o Controle de Projetos tem todas as UGs;
     // sem a potência, peso pelo número de UGs (1 de N); lista da usina inteira = 100%
@@ -3653,17 +3667,17 @@ async function rtExportar(opts={}){
     put(Ps,'B12',`Créditos por mês de compensação (${C.gc?'energia injetada no próprio mês':'energia injetada no mês anterior, M-1'}) — usina × peso da UG`,{b:true});
     ['Mês','Usina (MWh)','Peso da UG','Créditos da lista (kWh)','Lista que vale','Acum. lista atual (kWh)','Acum. nova lista (kWh)'].forEach((t,k)=>put(Ps,`${'BCDEFGH'[k]}13`,t,{b:true}));
     const r0c=14;let ao=0,an=0;
-    C.creditos.forEach((c,k)=>{const r=r0c+k,at=k<RT.LAG;if(at)ao+=c.kwh;else an+=c.kwh;
+    C.creditos.forEach((c,k)=>{const r=r0c+k,at=k<RT.LAG,nv=!at&&k<RT.H;if(at)ao+=c.kwh;else if(nv)an+=c.kwh;
       put(Ps,`B${r}`,rtLbl(c.comp));put(Ps,`C${r}`,Math.round(c.kwhUsina/100)/10,{fmt:'#,##0.0',fill:1});
       put(Ps,`D${r}`,fx('$C$10',RT.peso),{fmt:'0.00%'});put(Ps,`E${r}`,fx(`C${r}*1000*D${r}`,c.kwh),{fmt:'#,##0'});
-      put(Ps,`F${r}`,fx(`IF(ROW()-${r0c-1}<=$C$7,"atual","nova")`,at?'atual':'nova'));
+      put(Ps,`F${r}`,fx(`IF(ROW()-${r0c-1}<=$C$7,"atual",IF(ROW()-${r0c-1}<=$C$11,"nova","após o horizonte"))`,at?'atual':nv?'nova':'após o horizonte'));
       put(Ps,`G${r}`,fx(`SUMIF($F$${r0c}:F${r},"atual",$E$${r0c}:E${r})`,ao),{fmt:'#,##0'});put(Ps,`H${r}`,fx(`SUMIF($F$${r0c}:F${r},"nova",$E$${r0c}:E${r})`,an),{fmt:'#,##0'});
     });
     const rl=r0c+T-1;
     put(Ps,'B27','Créditos com a lista atual — Gatual (kWh)');put(Ps,'C27',fx(`G${rl}`,P.Gold[T-1]),{fmt:'#,##0',b:true});
     put(Ps,'B28','Créditos com a nova lista — Gnova (kWh)');put(Ps,'C28',fx(`H${rl}`,P.Gnew[T-1]),{fmt:'#,##0',b:true});
     // comparação (valores da simulação do portal)
-    put(Ps,'B30',`Comparação dos cenários — ${rtLbl(rtAdd(ult,1))} a ${rtLbl(rtAdd(ult,T))} (calculada no portal)`,{b:true});
+    put(Ps,'B30',`Comparação dos cenários — ${rtLbl(rtAdd(ult,1))} a ${rtLbl(rtAdd(ult,RT.H))}, fim do horizonte (calculada no portal)`,{b:true});
     put(Ps,'B31','Indicador',{b:true});RT.I.forEach(([nm],k)=>put(Ps,`${'CDE'[k]}31`,nm,{b:true}));
     [['Energia não compensada depois que a nova lista vale (MWh)',x=>x.naoCompDepois/1000,'#,##0.0'],['Energia não compensada antes da nova lista valer (MWh)',x=>x.naoCompAntes/1000,'#,##0.0'],
      ['Menor saldo de qualquer UC depois que a nova lista vale (meses)',x=>x.pisoMin,'0.00'],['UCs com menos de 1 mês de saldo em algum momento',x=>x.abaixo1,'0'],
@@ -3672,17 +3686,17 @@ async function rtExportar(opts={}){
     ].forEach(([t,fn,fmt],k)=>{const r=32+k;put(Ps,`B${r}`,t);RT.I.forEach(([,x],j)=>put(Ps,`${'CDE'[j]}${r}`,Math.round(fn(x)*100)/100,{fmt}))});
     // ── Cálculo do rateio: cada etapa numa coluna ──
     const R0=16,RL=R0+n-1;
-    const cabC=['Instalação','Consumo mediano (kWh)','d = consumo compensável','Saldo hoje (kWh)','Rateio atual (%)','base = saldo no fim sem a nova lista'];
+    const cabC=['Instalação','Consumo mediano (kWh)','d = consumo compensável','Saldo hoje (kWh)','Rateio atual (%)','base = saldo ao valer a nova lista − meses restantes × d'];
     for(let r=1;r<=8;r++)cabC.push(`Ativa na rodada ${r}`);
     cabC.push('p_eq = rateio equalizado','p_min = mínimo p/ não zerar','extra = MAX(0; p_min − p_eq)','doador = p_eq se extra = 0','p_pré = rateio com segurança','p = p_pré ÷ Σ p_pré','Arredondado (%)','RATEIO PROPOSTO (%)');
     for(let t=1;t<=T;t++)cabC.push(`p mín. no mês ${t}`);
     const CC=k=>colL(k);
     put(Cs,'A1','Cálculo do rateio proposto — passo a passo',{b:true,sz:14});
     const passos=['1) d = MAX(0; mediana do consumo − taxa mínima): consumo que de fato usa crédito.',
-      '2) base = saldo hoje + rateio atual × Gatual − 12 × d: saldo que a UC teria no fim do ciclo se não recebesse nada da nova lista.',
-      '3) Equalização: m = (Σ base + Gnova) ÷ Σ d, só com UCs ativas; fica ativa a UC com m·d − base > 0. Repete por 8 rodadas até estabilizar (linha 12).',
+      '2) base = saldo da UC quando a nova lista passa a valer (aba Simulação, rateio atual, mês a mês e sem ficar negativo — o que não foi compensado nesses meses já foi pago na fatura) − (horizonte − meses até valer) × d: saldo no fim do horizonte se a UC não recebesse nada da nova lista.',
+      '3) Equalização no fim do horizonte: m = (Σ base + Gnova) ÷ Σ d, só com UCs ativas — o saldo de cada UC fica diluído no período (rateio menor, não zero); fica ativa a UC com m·d − base > 0. Repete por 8 rodadas até estabilizar (linha 12).',
       '4) p_eq = (m·d − base) ÷ Gnova: rateio para todas terminarem com m meses de saldo; UCs com saldo de sobra ficam com zero.',
-      '5) Segurança: p mín. no mês t = MAX(0; −(saldo + rateio atual × Gatual(t) − d·t) ÷ Gnova(t)); p_min é o maior deles. Quem precisa recebe p_min; os doadores cedem na proporção f (nunca abaixo de zero). Se os créditos não cobrem o consumo (m ≤ 0, célula G12), não há como proteger todas: o ajuste é desligado e vale o rateio equalizado, que divide o déficit por igual. Por fim p = p_pré ÷ Σ p_pré, para somar 100%.',
+      '5) Segurança: p mín. no mês t = MAX(0; −(saldo ao valer a nova lista − d × meses desde então) ÷ Gnova(t)); p_min é o maior deles. Quem precisa recebe p_min; os doadores cedem na proporção f (nunca abaixo de zero). Se os créditos não cobrem o consumo (m ≤ 0, célula G12), não há como proteger todas: o ajuste é desligado e vale o rateio equalizado, que divide o déficit por igual. Por fim p = p_pré ÷ Σ p_pré, para somar 100%.',
       '6) Arredonda em 2 casas; a diferença para 100% vai para a UC de maior rateio.'];
     passos.forEach((t,k)=>{const c=put(Cs,`A${2+k}`,t,{wrap:true});Cs.mergeCells(`A${2+k}:P${2+k}`);Cs.getRow(2+k).height=28});
     put(Cs,'A9','Gnova (kWh)',{b:true});put(Cs,'B9',fx(`${PS}!C28`,P.Gnew[T-1]),{fmt:'#,##0'});
@@ -3713,13 +3727,14 @@ async function rtExportar(opts={}){
       set('C',fx(`MAX(0,B${r}-${PS}!$C$6)`,P.dbar[i]),'#,##0');
       set('D',fx(`MAX(0,${RS}!${cSal}${rr})`,Math.max(0,u.saldo)),'#,##0');
       set('E',fx(`${RS}!${cAt}${rr}${divAt===0.01?'*100':''}`,u.atual),'0.00');
-      set('F',fx(`D${r}+E${r}/100*$B$10-${T}*C${r}`,P.base[i]),'#,##0');
+      const sLagF=`IF(${PS}!$C$7=0,D${r},INDEX(${SS}!$${colL(14)}$${4+i}:$${colL(14+T-1)}$${4+i},${PS}!$C$7))`;
+      set('F',fx(`${sLagF}-(${PS}!$C$11-${PS}!$C$7)*C${r}`,P.base[i]),'#,##0');
       for(let k=1;k<=8;k++){const m=`${CC(k)}$11`,prev=k===1?`C${r}>0`:`${ativoCol(k-1)}${r}=1`;
         set(ativoCol(k),fx(`IF(AND(${prev},${m}*C${r}-F${r}>0),1,0)`,P.hist[k][i]?1:0))}
       set(cPEQ,fx(`IF(${ativoCol(8)}${r}=1,(${CC(8)}$11*C${r}-F${r})/$B$9,0)`,P.peq[i]),'0.000000');
       for(let t=1;t<=T;t++){const g=`${PS}!$G$${r0c+t-1}`,gn=`${PS}!$H$${r0c+t-1}`;
-        const bt=Math.max(0,u.saldo)+u.atual/100*P.Gold[t-1]-P.dbar[i]*t,res=P.Gnew[t-1]>0?Math.max(0,-bt/P.Gnew[t-1]):0;
-        set(cMes(t),fx(`IF(${gn}>0,MAX(0,-(D${r}+E${r}/100*${g}-C${r}*${t})/${gn}),0)`,res),'0.000000')}
+        const vale=t>RT.LAG&&t<=RT.H,bt=P.sLag[i]-P.dbar[i]*(t-RT.LAG),res=vale&&P.Gnew[t-1]>0?Math.max(0,-bt/P.Gnew[t-1]):0;
+        set(cMes(t),fx(`IF(AND(${PS}!$F$${r0c+t-1}="nova",${gn}>0),MAX(0,-(${sLagF}-C${r}*(${t}-${PS}!$C$7))/${gn}),0)`,res),'0.000000')}
       set(cPMIN,fx(`IF(C${r}>0,MAX(${cMes(1)}${r}:${cMes(T)}${r}),0)`,P.pmin[i]),'0.000000');
       set(cEX,fx(`IF($${CC(8)}$11>0,MAX(0,${cPMIN}${r}-${cPEQ}${r}),0)`,P.extra[i]),'0.000000');
       set(cDO,fx(`IF(${cEX}${r}>0,0,${cPEQ}${r})`,P.extra[i]>0?0:P.peq[i]),'0.000000');
@@ -3732,7 +3747,7 @@ async function rtExportar(opts={}){
     put(Cs,`A${RL+1}`,'TOTAL',{b:true});put(Cs,`${cFIN}${RL+1}`,fx(`SUM(${cFIN}${R0}:${cFIN}${RL})`,100),{b:true,fmt:'0.00'});
     Cs.views=[{state:'frozen',xSplit:1,ySplit:R0-1}];
     // ── Simulação: saldo mês a mês (nunca negativo), atual e proposto ──
-    put(Ss,'A1','Simulação do saldo de cada UC mês a mês — s(t) = MAX(0; s(t−1) + rateio × créditos(t) − d). Nos primeiros meses vale o rateio atual.',{b:true});
+    put(Ss,'A1','Simulação do saldo de cada UC mês a mês — s(t) = MAX(0; s(t−1) + rateio × créditos(t) − d). Nos primeiros meses vale o rateio atual; em cinza, os meses depois do horizonte.',{b:true});
     Ss.getColumn(1).width=16;
     const mesesSim=C.creditos.map(c=>rtLbl(c.comp));
     put(Ss,'A3','Instalação',{b:true});
@@ -3742,6 +3757,7 @@ async function rtExportar(opts={}){
       for(let t=0;t<T;t++){const g=`${PS}!$E$${r0c+t}`,lista=`${PS}!$F$${r0c+t}`;
         const ant=t===0?`${CS}!$D${rc}`:`${colL(t)}${r}`,antA=t===0?`${CS}!$D${rc}`:`${colL(13+t)}${r}`;
         const cp=Ss.getCell(`${colL(1+t)}${r}`);cp.value=fx(`MAX(0,${ant}+IF(${lista}="atual",${CS}!$E${rc},${CS}!$${cFIN}${rc})/100*${g}-${CS}!$C${rc})`,simP.hist[t][i]);cp.numFmt='#,##0';
+        if(t>=RT.H)cp.font={color:{argb:'FF9E9E9E'}};
         const ca=Ss.getCell(`${colL(14+t)}${r}`);ca.value=fx(`MAX(0,${antA}+${CS}!$E${rc}/100*${g}-${CS}!$C${rc})`,simA.hist[t][i]);ca.numFmt='#,##0'}});
     Ss.views=[{state:'frozen',xSplit:1,ySplit:3}];
     // ── Rateios: colunas ao lado do rateio sugerido, ligadas às abas de cálculo ──
@@ -3755,9 +3771,10 @@ async function rtExportar(opts={}){
       set(1,fx(`${LC(0)}${r}*100-${CS}!E${rc}`,P.pcts[i]-u.atual),'+0.00;-0.00;0.00');
       set(2,fx(`${CS}!C${rc}`,d),'#,##0');
       set(3,fx(`IF(${LC(2)}${r}>0,${cSal}${r}/${LC(2)}${r},"—")`,d>0?u.saldo/d:'—'),'0.0');
-      set(4,fx(`${SS}!${colL(13+T)}${rs}`,simA.hist[T-1][i]),'#,##0');
-      set(5,fx(`${SS}!${colL(T)}${rs}`,simP.hist[T-1][i]),'#,##0');
-      set(6,fx(`IF(${LC(2)}${r}>0,${LC(5)}${r}/${LC(2)}${r},"—")`,d>0?simP.hist[T-1][i]/d:'—'),'0.0');
+      const fimV=`${PS}!$C$11`,hV=RT.H-1;
+      set(4,fx(`INDEX(${SS}!$${colL(14)}${rs}:$${colL(13+T)}${rs},${fimV})`,simA.hist[hV][i]),'#,##0');
+      set(5,fx(`INDEX(${SS}!$${colL(1)}${rs}:$${colL(T)}${rs},${fimV})`,simP.hist[hV][i]),'#,##0');
+      set(6,fx(`IF(${LC(2)}${r}>0,${LC(5)}${r}/${LC(2)}${r},"—")`,d>0?simP.hist[hV][i]/d:'—'),'0.0');
       set(7,RT.linhas[i].obs.txt);});
     const tr=Math.max(...L.ucs.map(u=>u.linha))+2,tot=ws.getRow(tr);
     tot.getCell(1).value='TOTAL';tot.getCell(1).font={bold:true};
